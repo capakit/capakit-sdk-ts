@@ -131,7 +131,7 @@ class HostedRunnerSdk implements RunnerSdk {
         this.installSignalHandlers();
         this.installParentMonitor();
         console.log(
-            `[capakit-sdk] workload=${this.env.workloadMid ?? "unknown"} listening`,
+            `[@capakit/sdk] workload=${this.env.workloadMid ?? "unknown"} listening`,
         );
     }
 
@@ -250,7 +250,7 @@ class HostedRunnerSdk implements RunnerSdk {
         }
         this.removeParentMonitor();
         console.error(
-            `[capakit-sdk] parent process exited; shutting down orphaned workload pid=${process.pid}`,
+            `[@capakit/sdk] parent process exited; shutting down orphaned workload pid=${process.pid}`,
         );
         this.orphanExitTimer = setTimeout(() => {
             process.exit(0);
@@ -264,7 +264,7 @@ class HostedRunnerSdk implements RunnerSdk {
             process.exit(0);
         } catch (error) {
             this.clearOrphanExitTimer();
-            console.error("[capakit-sdk] orphan shutdown failed", error);
+            console.error("[@capakit/sdk] orphan shutdown failed", error);
             process.exit(1);
         }
     }
@@ -286,7 +286,7 @@ class HostedRunnerSdk implements RunnerSdk {
             process.exit(0);
         } catch (error) {
             console.error(
-                `[capakit-sdk] shutdown failed for signal=${signal}`,
+                `[@capakit/sdk] shutdown failed for signal=${signal}`,
                 error,
             );
             process.exit(1);

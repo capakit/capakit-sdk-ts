@@ -67,7 +67,7 @@ function writeWireHostLog(method: ConsoleMethod, args: readonly unknown[]): void
     try {
         write(`${line}\n`);
     } catch (error) {
-        originals.error("[capakit-sdk] failed to write host log", error);
+        originals.error("[@capakit/sdk] failed to write host log", error);
     }
 }
 

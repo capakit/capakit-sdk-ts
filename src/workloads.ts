@@ -45,7 +45,7 @@ export class RunnerWorkloadsImpl implements RunnerWorkloads {
 
         const connection = this.connections.get(connectionKey(workloadMidValue, endpointPathValue))!;
         const client = new Client({
-            name: "capakit-sdk",
+            name: "@capakit/sdk",
             version: "0.0.0",
         });
         const transport = new HostedMcpClientTransport(

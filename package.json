@@ -1,5 +1,5 @@
 {
-    "name": "capakit-sdk",
+    "name": "@capakit/sdk",
     "version": "0.0.1",
     "description": "TypeScript SDK for CapaKit Workloads.",
     "repository": {
