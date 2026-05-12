@@ -1,5 +1,6 @@
 import { connect as connectHttp2 } from "node:http2";
 import type {
+    ClientHttp2Stream,
     ClientSessionOptions,
     Http2Server,
     IncomingHttpHeaders,
@@ -8,7 +9,6 @@ import type {
 } from "node:http2";
 import { unlink } from "node:fs/promises";
 import { connect as connectNet } from "node:net";
-import { Readable } from "node:stream";
 
 import type { HostedBind, HostedBindValue } from "./public-types.ts";
 
@@ -86,15 +86,17 @@ export function createHostedFetch(bind: HostedBind): typeof fetch {
             clientAuthority(bind),
             clientConnectOptions(bind),
         );
+        let stream: ClientHttp2Stream | undefined;
 
         const abort = () => {
-            session.close();
+            stream?.close();
+            session.destroy();
         };
         request.signal.addEventListener("abort", abort, { once: true });
 
         try {
             const url = new URL(request.url);
-            const stream = session.request({
+            stream = session.request({
                 ":method": request.method,
                 ":path": `${url.pathname}${url.search}`,
                 ...requestHeaders(request.headers),
@@ -107,25 +109,60 @@ export function createHostedFetch(bind: HostedBind): typeof fetch {
                 stream.end();
             }
 
-            const responseHeaders = await new Promise<IncomingHttpHeaders>((resolve, reject) => {
-                stream.once("response", (headers) => resolve(headers));
-                stream.once("error", reject);
-                session.once("error", reject);
-            });
-
-            stream.on("close", () => {
-                session.close();
-            });
+            const responseHeaders = await waitForResponse(stream, session);
+            const responseBody = await readClientResponseBody(stream);
 
             const status = Number(responseHeaders[":status"] ?? 200);
-            return new Response(Readable.toWeb(stream) as ReadableStream, {
+            return new Response(responseBody, {
                 status,
                 headers: responseHeadersToWeb(responseHeaders),
             });
         } finally {
             request.signal.removeEventListener("abort", abort);
+            stream?.close();
+            session.close();
+            session.destroy();
         }
     };
+}
+
+function waitForResponse(
+    stream: ClientHttp2Stream,
+    session: ReturnType<typeof connectHttp2>,
+): Promise<IncomingHttpHeaders> {
+    return new Promise<IncomingHttpHeaders>((resolve, reject) => {
+        const cleanup = () => {
+            stream.off("response", onResponse);
+            stream.off("error", onError);
+            session.off("error", onError);
+            session.off("close", onClose);
+        };
+        const onResponse = (headers: IncomingHttpHeaders) => {
+            cleanup();
+            resolve(headers);
+        };
+        const onError = (error: Error) => {
+            cleanup();
+            reject(error);
+        };
+        const onClose = () => {
+            cleanup();
+            reject(new Error("hosted fetch session closed before response"));
+        };
+
+        stream.once("response", onResponse);
+        stream.once("error", onError);
+        session.once("error", onError);
+        session.once("close", onClose);
+    });
+}
+
+async function readClientResponseBody(stream: ClientHttp2Stream): Promise<Buffer> {
+    const chunks: Buffer[] = [];
+    for await (const chunk of stream) {
+        chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+    }
+    return chunks.length === 0 ? Buffer.alloc(0) : Buffer.concat(chunks);
 }
 
 export async function readRequestBody(
