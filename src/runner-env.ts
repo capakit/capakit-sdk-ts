@@ -5,8 +5,8 @@ import {
 import type {
     EndpointPath,
     HostedBindValue,
+    PresenceId,
     RunnerProtocol,
-    SessionId,
     WorkloadMid,
 } from "./public-types.ts";
 
@@ -17,7 +17,7 @@ export const RUNNER_ENV_KEYS = {
     runnerHostPid: "CAPAKIT_RUNNER_HOST_PID",
     runnerBridgeBind: "CAPAKIT_RUNNER_BRIDGE_BIND",
     runnerSid: "CAPAKIT_RUNNER_SID",
-    sessionId: "CAPAKIT_SESSION_ID",
+    presenceId: "CAPAKIT_PRESENCE_ID",
     workloadMid: "CAPAKIT_WORKLOAD_MID",
 } as const;
 
@@ -38,7 +38,7 @@ export type RunnerEnv = {
     runnerHostPid?: number;
     runnerBridgeBind?: HostedBindValue;
     runnerSid?: string;
-    sessionId?: SessionId;
+    presenceId?: PresenceId;
     workloadMid?: WorkloadMid;
 };
 
@@ -57,7 +57,7 @@ export function loadRunnerEnv(env: NodeJS.ProcessEnv = process.env): RunnerEnv {
         runnerHostPid: optionalPositiveInt(env[RUNNER_ENV_KEYS.runnerHostPid]),
         runnerBridgeBind: env[RUNNER_ENV_KEYS.runnerBridgeBind],
         runnerSid: env[RUNNER_ENV_KEYS.runnerSid],
-        sessionId: optionalSessionId(env[RUNNER_ENV_KEYS.sessionId]),
+        presenceId: optionalPresenceId(env[RUNNER_ENV_KEYS.presenceId]),
         workloadMid: optionalWorkloadMid(env[RUNNER_ENV_KEYS.workloadMid]),
     };
 }
@@ -112,8 +112,8 @@ function optionalHostBackend(value: string | undefined): RunnerHostBackend | und
     return value as RunnerHostBackend | undefined;
 }
 
-function optionalSessionId(value: string | undefined): SessionId | undefined {
-    return value as SessionId | undefined;
+function optionalPresenceId(value: string | undefined): PresenceId | undefined {
+    return value as PresenceId | undefined;
 }
 
 function optionalWorkloadMid(value: string | undefined): WorkloadMid | undefined {

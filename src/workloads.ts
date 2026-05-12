@@ -52,7 +52,7 @@ export class RunnerWorkloadsImpl implements RunnerWorkloads {
             parseBind(connection.bind),
             endpointPath(endpointPathValue),
         );
-        await client.connect(transport);
+        await client.connect(transport, { timeout: options.timeoutMs });
         this.mcpClients.add(client);
         return client;
     }

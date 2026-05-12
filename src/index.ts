@@ -17,8 +17,8 @@ import type {
     EndpointPath,
     HostedBind,
     RunnerA2aMount,
-    RunnerSessionLifecycleHook,
-    RunnerSessionLifecycleContext,
+    RunnerPresenceLifecycleContext,
+    RunnerPresenceLifecycleHook,
     RunnerOaicMount,
     RunnerSdk,
     RunnerSdkMount,
@@ -62,7 +62,7 @@ class HostedRunnerSdk implements RunnerSdk {
     private readonly env: RunnerEnv;
     private readonly initialParentPid: number;
     private readonly runnerHostPid?: number;
-    private readonly onSessionStart?: RunnerSessionLifecycleHook;
+    private readonly onPresenceStart?: RunnerPresenceLifecycleHook;
     private readonly onShutdown?: RunnerShutdownHook;
     private readonly mountedTransports = new Map<string, MountedHttpTransport>();
     private server: Http2Server | null = null;
@@ -78,7 +78,7 @@ class HostedRunnerSdk implements RunnerSdk {
         this.initialParentPid = currentParentPid();
         this.runnerHostPid = this.env.runnerHostPid;
         this.bind = parseBind(options.bind ?? this.env.managedIngressBind);
-        this.onSessionStart = options.onSessionStart;
+        this.onPresenceStart = options.onPresenceStart;
         this.onShutdown = options.onShutdown;
         this.workloads = new RunnerWorkloadsImpl(this.env);
         this.secrets = new RunnerSecretsImpl(this.env);
@@ -121,7 +121,7 @@ class HostedRunnerSdk implements RunnerSdk {
         for (const mount of this.mountedTransports.values()) {
             await mount.start?.();
         }
-        await this.onSessionStart?.(this.lifecycleContext());
+        await this.onPresenceStart?.(this.lifecycleContext());
         const server = createServer();
         server.on("stream", (stream, headers) => {
             void this.handleStream(stream as ServerHttp2Stream, headers);
@@ -185,9 +185,9 @@ class HostedRunnerSdk implements RunnerSdk {
         }
     }
 
-    private lifecycleContext(): RunnerSessionLifecycleContext {
+    private lifecycleContext(): RunnerPresenceLifecycleContext {
         return {
-            sessionId: this.env.sessionId,
+            presenceId: this.env.presenceId,
             workloadMid: this.env.workloadMid,
         };
     }

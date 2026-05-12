@@ -21,14 +21,14 @@ describe("loadRunnerEnv", () => {
             [RUNNER_ENV_KEYS.managedIngressBind]: "unix:/tmp/capakit.sock",
             [RUNNER_ENV_KEYS.runnerBridgeBind]: "tcp:127.0.0.1:4200",
             [RUNNER_ENV_KEYS.runnerSid]: "sid:runner/dev",
-            [RUNNER_ENV_KEYS.sessionId]: "session-1",
+            [RUNNER_ENV_KEYS.presenceId]: "presence-1",
             [RUNNER_ENV_KEYS.workloadMid]: "mid:self/workload",
         });
 
         expect(env.managedIngressBind).toBe("unix:/tmp/capakit.sock");
         expect(env.runnerBridgeBind).toBe("tcp:127.0.0.1:4200");
         expect(env.runnerSid).toBe("sid:runner/dev");
-        expect(env.sessionId).toBe("session-1");
+        expect(env.presenceId).toBe("presence-1");
         expect(env.workloadMid).toBe("mid:self/workload");
         expect(env.connectedWorkloads).toEqual([
             {

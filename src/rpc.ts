@@ -1,5 +1,9 @@
 import { connect as connectHttp2 } from "node:http2";
-import type { ClientHttp2Session, ClientHttp2Stream } from "node:http2";
+import type {
+    ClientHttp2Session,
+    ClientHttp2Stream,
+    IncomingHttpHeaders,
+} from "node:http2";
 
 import {
     clientAuthority,
@@ -9,6 +13,9 @@ import {
 import type { HostedBind } from "./public-types.ts";
 
 const BRIDGE_CONTENT_TYPE = "application/x-capakit-runner-bridge-json-framed";
+const FRAME_HEADER_BYTES = 4;
+const MAX_FRAME_BYTES = 4 * 1024 * 1024;
+const MAX_BUFFER_BYTES = 8 * 1024 * 1024;
 
 type BridgeResponse = { id: string; ok: unknown } | { id: string; error: unknown };
 
@@ -59,7 +66,7 @@ export class RunnerBridgeClient {
             this.pending.set(id, { resolve, reject });
         });
         try {
-            stream.write(encodeLengthPrefixedJsonFrame(request));
+            await writeFrame(stream, encodeLengthPrefixedJsonFrame(request));
         } catch (error) {
             this.pending.delete(id);
             throw error;
@@ -108,7 +115,7 @@ export class RunnerBridgeClient {
         stream.on("data", (chunk: Buffer) => {
             try {
                 for (const response of this.parser.feed(chunk)) {
-                    this.resolvePending(response as BridgeResponse);
+                    this.resolvePending(decodeBridgeResponse(response));
                 }
             } catch (error) {
                 this.failPending(error instanceof Error ? error : new Error(String(error)));
@@ -117,9 +124,22 @@ export class RunnerBridgeClient {
         });
 
         await new Promise<void>((resolve, reject) => {
-            stream.once("response", () => resolve());
+            stream.once("response", (headers) => {
+                try {
+                    validateBridgeResponseHeaders(headers);
+                    resolve();
+                } catch (error) {
+                    reject(error);
+                }
+            });
             stream.once("error", reject);
             session.once("error", reject);
+        }).catch((error) => {
+            stream.close();
+            session.close();
+            this.stream = null;
+            this.session = null;
+            throw error;
         });
     }
 
@@ -142,6 +162,9 @@ export class RunnerBridgeClient {
 
 function encodeLengthPrefixedJsonFrame(value: unknown): Buffer {
     const body = Buffer.from(JSON.stringify(value), "utf8");
+    if (body.length > MAX_FRAME_BYTES) {
+        throw new Error("runner bridge request frame exceeds maximum size");
+    }
     const header = Buffer.alloc(4);
     header.writeUInt32BE(body.length, 0);
     return Buffer.concat([header, body]);
@@ -152,19 +175,101 @@ class LengthPrefixedJsonParser {
 
     feed(chunk: Buffer): unknown[] {
         this.buffer = Buffer.concat([this.buffer, chunk]);
+        if (this.buffer.length > MAX_BUFFER_BYTES) {
+            this.buffer = Buffer.alloc(0);
+            throw new Error("runner bridge frame buffer limit exceeded");
+        }
+
         const parsed: unknown[] = [];
-        while (this.buffer.length >= 4) {
+        while (this.buffer.length >= FRAME_HEADER_BYTES) {
             const bodyLength = this.buffer.readUInt32BE(0);
-            const frameLength = 4 + bodyLength;
+            if (bodyLength > MAX_FRAME_BYTES) {
+                this.buffer = Buffer.alloc(0);
+                throw new Error("runner bridge frame exceeds maximum size");
+            }
+            const frameLength = FRAME_HEADER_BYTES + bodyLength;
             if (this.buffer.length < frameLength) {
                 break;
             }
-            const body = this.buffer.subarray(4, frameLength);
+            const body = this.buffer.subarray(FRAME_HEADER_BYTES, frameLength);
             this.buffer = this.buffer.subarray(frameLength);
             parsed.push(JSON.parse(body.toString("utf8")));
         }
         return parsed;
     }
+}
+
+function validateBridgeResponseHeaders(headers: IncomingHttpHeaders): void {
+    const status = Number(headers[":status"]);
+    if (status !== 200) {
+        throw new Error(`runner bridge open failed with status ${status || "unknown"}`);
+    }
+
+    const contentType = headerValue(headers["content-type"])
+        .split(";")[0]
+        .trim()
+        .toLowerCase();
+    if (contentType !== BRIDGE_CONTENT_TYPE) {
+        throw new Error(`runner bridge returned unexpected content-type \`${contentType}\``);
+    }
+}
+
+function headerValue(value: string | string[] | number | undefined): string {
+    if (Array.isArray(value)) {
+        return value[0] ?? "";
+    }
+    return value === undefined ? "" : String(value);
+}
+
+function decodeBridgeResponse(value: unknown): BridgeResponse {
+    if (!value || typeof value !== "object" || Array.isArray(value)) {
+        throw new Error("runner bridge response must be an object");
+    }
+    const record = value as Record<string, unknown>;
+    if (typeof record.id !== "string") {
+        throw new Error("runner bridge response is missing string id");
+    }
+    if ("error" in record) {
+        return {
+            id: record.id,
+            error: record.error,
+        };
+    }
+    if ("ok" in record) {
+        return {
+            id: record.id,
+            ok: record.ok,
+        };
+    }
+    throw new Error("runner bridge response must include ok or error");
+}
+
+async function writeFrame(stream: ClientHttp2Stream, frame: Buffer): Promise<void> {
+    if (stream.write(frame)) {
+        return;
+    }
+    await new Promise<void>((resolve, reject) => {
+        const cleanup = () => {
+            stream.off("drain", onDrain);
+            stream.off("error", onError);
+            stream.off("close", onClose);
+        };
+        const onDrain = () => {
+            cleanup();
+            resolve();
+        };
+        const onError = (error: Error) => {
+            cleanup();
+            reject(error);
+        };
+        const onClose = () => {
+            cleanup();
+            reject(new Error("runner bridge stream closed"));
+        };
+        stream.once("drain", onDrain);
+        stream.once("error", onError);
+        stream.once("close", onClose);
+    });
 }
 
 function formatRpcError(error: unknown): string {

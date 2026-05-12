@@ -14,7 +14,8 @@ type Brand<T, Name extends string> = T & {
 };
 
 export type HostedBindValue = string;
-export type SessionId = string;
+export type PresenceId = string;
+export type McpSessionId = string;
 export type EndpointPath = Brand<string, "EndpointPath">;
 export type WorkloadMid = Brand<string, "WorkloadMid">;
 export type SecretMid = Brand<string, "SecretMid">;
@@ -42,6 +43,7 @@ export function secretMid(value: string): SecretMid {
 
 export type ClientOptions = {
     signal?: AbortSignal;
+    timeoutMs?: number;
 };
 
 export type RunnerWorkloadConnection = {
@@ -87,7 +89,7 @@ export type RunnerSecrets = {
 
 export type RunnerSdkOptions = {
     bind?: HostedBindValue;
-    onSessionStart?: RunnerSessionLifecycleHook;
+    onPresenceStart?: RunnerPresenceLifecycleHook;
     onShutdown?: RunnerShutdownHook;
 };
 
@@ -97,7 +99,7 @@ export type RunnerMcpMount = {
     server: McpServer;
 };
 
-export type RunnerHttpHandlerContext = RunnerSessionLifecycleContext & {
+export type RunnerHttpHandlerContext = RunnerPresenceLifecycleContext & {
     protocol: Exclude<RunnerProtocol, "mcp">;
     endpoint: EndpointPath;
 };
@@ -125,8 +127,8 @@ export type RunnerSdkMount = RunnerMcpMount | RunnerOaicMount | RunnerA2aMount;
 
 export type RunnerSignal = "SIGINT" | "SIGTERM";
 
-export type RunnerSessionLifecycleContext = {
-    sessionId?: SessionId;
+export type RunnerPresenceLifecycleContext = {
+    presenceId?: PresenceId;
     workloadMid?: WorkloadMid;
 };
 
@@ -135,12 +137,12 @@ export type RunnerShutdownCause =
     | { kind: "orphaned"; initialParentPid: number }
     | { kind: "stop" };
 
-export type RunnerShutdownContext = RunnerSessionLifecycleContext & {
+export type RunnerShutdownContext = RunnerPresenceLifecycleContext & {
     cause: RunnerShutdownCause;
 };
 
-export type RunnerSessionLifecycleHook = (
-    context: RunnerSessionLifecycleContext,
+export type RunnerPresenceLifecycleHook = (
+    context: RunnerPresenceLifecycleContext,
 ) => void | Promise<void>;
 
 export type RunnerShutdownHook = (

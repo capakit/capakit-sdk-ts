@@ -14,7 +14,7 @@ import {
     clientAuthority,
     clientConnectOptions,
 } from "./transport.ts";
-import type { EndpointPath, HostedBind, SessionId } from "./public-types.ts";
+import type { EndpointPath, HostedBind, McpSessionId } from "./public-types.ts";
 
 const MCP_STREAM_CONTENT_TYPE = "application/x-ndjson";
 
@@ -29,7 +29,7 @@ export class HostedMcpClientTransport implements Transport {
     onclose?: () => void;
     onerror?: (error: Error) => void;
     onmessage?: (message: JSONRPCMessage) => void;
-    sessionId?: SessionId;
+    sessionId?: McpSessionId;
 
     private session: ClientHttp2Session | null = null;
     private stream: ClientHttp2Stream | null = null;
@@ -110,6 +110,7 @@ export class HostedMcpBridge {
     private mountedServer: McpServer | null = null;
     private clientTransport: InMemoryTransport | null = null;
     private readonly pendingResponses = new Map<string, PendingResponse>();
+    private exchangeQueue: Promise<void> = Promise.resolve();
     private outboundMessageHandler: OutboundMessageHandler | null = null;
 
     mount(server: McpServer): void {
@@ -188,13 +189,11 @@ export class HostedMcpBridge {
             return writing;
         };
 
-        const detachOutboundHandler = this.attachOutboundMessageHandler((message) => {
-            return writeMessage(message);
-        });
+        const outboundHandler = (message: JSONRPCMessage) => writeMessage(message);
         const inbound = pipeJsonRpcMessages(stream, async (message) => {
             processing = processing.then(async () => {
                 try {
-                    const response = await this.handleMessage(message);
+                    const response = await this.handleMessage(message, outboundHandler);
                     if (response) {
                         await writeMessage(response);
                     }
@@ -213,11 +212,7 @@ export class HostedMcpBridge {
             await processing;
         });
 
-        stream.on("close", () => {
-            detachOutboundHandler();
-        });
         stream.on("end", () => {
-            detachOutboundHandler();
             void Promise.all([inbound, processing, writing]).then(() => {
                 if (stream.destroyed || stream.closed) {
                     return;
@@ -250,7 +245,10 @@ export class HostedMcpBridge {
         });
     }
 
-    async handleMessage(message: JSONRPCMessage): Promise<JSONRPCMessage | null> {
+    async handleMessage(
+        message: JSONRPCMessage,
+        outboundHandler: OutboundMessageHandler,
+    ): Promise<JSONRPCMessage | null> {
         const transport = this.clientTransport;
         if (!transport) {
             throw new Error("runner MCP bridge is not started");
@@ -266,23 +264,42 @@ export class HostedMcpBridge {
             return null;
         }
 
-        const key = responseKey(message.id);
-        return await new Promise<JSONRPCMessage>((resolve, reject) => {
-            this.pendingResponses.set(key, { resolve, reject });
-            void transport.send(message).catch((error) => {
-                this.pendingResponses.delete(key);
-                reject(error instanceof Error ? error : new Error(String(error)));
+        return await this.enqueueExchange(async () => {
+            return await this.withOutboundMessageHandler(outboundHandler, async () => {
+                const key = responseKey(message.id);
+                return await new Promise<JSONRPCMessage>((resolve, reject) => {
+                    this.pendingResponses.set(key, { resolve, reject });
+                    void transport.send(message).catch((error) => {
+                        this.pendingResponses.delete(key);
+                        reject(error instanceof Error ? error : new Error(String(error)));
+                    });
+                });
             });
         });
     }
 
-    attachOutboundMessageHandler(handler: OutboundMessageHandler): () => void {
+    private async enqueueExchange<T>(work: () => Promise<T>): Promise<T> {
+        const run = this.exchangeQueue.then(work, work);
+        this.exchangeQueue = run.then(
+            () => undefined,
+            () => undefined,
+        );
+        return await run;
+    }
+
+    private async withOutboundMessageHandler<T>(
+        handler: OutboundMessageHandler,
+        work: () => Promise<T>,
+    ): Promise<T> {
+        const previous = this.outboundMessageHandler;
         this.outboundMessageHandler = handler;
-        return () => {
+        try {
+            return await work();
+        } finally {
             if (this.outboundMessageHandler === handler) {
-                this.outboundMessageHandler = null;
+                this.outboundMessageHandler = previous;
             }
-        };
+        }
     }
 
     private async handleClientMessage(message: JSONRPCMessage): Promise<void> {
