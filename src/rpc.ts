@@ -1,37 +1,18 @@
-import { connect as connectHttp2 } from "node:http2";
-import type {
-    ClientHttp2Session,
-    ClientHttp2Stream,
-    IncomingHttpHeaders,
-} from "node:http2";
+import { request as requestHttp } from "node:http";
+import type { IncomingMessage, RequestOptions } from "node:http";
 
-import {
-    clientAuthority,
-    clientConnectOptions,
-    parseBind,
-} from "./transport.ts";
+import { parseBind } from "./transport.ts";
 import type { HostedBind } from "./public-types.ts";
 
-const BRIDGE_CONTENT_TYPE = "application/x-capakit-runner-bridge-json-framed";
-const FRAME_HEADER_BYTES = 4;
+const BRIDGE_CONTENT_TYPE = "application/x-capakit-runner-bridge-jsonl";
 const MAX_FRAME_BYTES = 4 * 1024 * 1024;
 const MAX_BUFFER_BYTES = 8 * 1024 * 1024;
 
 type BridgeResponse = { id: string; ok: unknown } | { id: string; error: unknown };
 
-type PendingCall = {
-    resolve: (response: BridgeResponse) => void;
-    reject: (error: Error) => void;
-};
-
 export class RunnerBridgeClient {
     private nextId = 1;
     private readonly bind: HostedBind;
-    private session: ClientHttp2Session | null = null;
-    private stream: ClientHttp2Stream | null = null;
-    private pending = new Map<string, PendingCall>();
-    private parser = new LengthPrefixedJsonParser();
-    private opening: Promise<void> | null = null;
 
     constructor(value: string) {
         this.bind = parseBind(value);
@@ -46,131 +27,74 @@ export class RunnerBridgeClient {
         return response.ok as Result;
     }
 
-    async close(): Promise<void> {
-        this.failPending(new Error("runner bridge client closed"));
-        this.stream?.end();
-        this.session?.close();
-        this.stream = null;
-        this.session = null;
-        this.opening = null;
-    }
+    async close(): Promise<void> {}
 
     private async send(id: string, request: unknown): Promise<BridgeResponse> {
-        await this.open();
-        const stream = this.stream;
-        if (!stream || stream.closed || stream.destroyed) {
-            throw new Error("runner bridge stream is closed");
-        }
-
-        const response = new Promise<BridgeResponse>((resolve, reject) => {
-            this.pending.set(id, { resolve, reject });
-        });
-        try {
-            await writeFrame(stream, encodeLengthPrefixedJsonFrame(request));
-        } catch (error) {
-            this.pending.delete(id);
-            throw error;
-        }
-        return await response;
-    }
-
-    private async open(): Promise<void> {
-        if (this.stream && !this.stream.closed && !this.stream.destroyed) {
-            return;
-        }
-        if (this.opening) {
-            return await this.opening;
-        }
-        this.opening = this.openFresh();
-        try {
-            await this.opening;
-        } finally {
-            this.opening = null;
-        }
-    }
-
-    private async openFresh(): Promise<void> {
-        const session = connectHttp2(
-            clientAuthority(this.bind),
-            clientConnectOptions(this.bind),
-        );
-        const stream = session.request({
-            ":method": "POST",
-            ":path": "/rpc",
-            "content-type": BRIDGE_CONTENT_TYPE,
-        });
-
-        this.session = session;
-        this.stream = stream;
-        this.parser = new LengthPrefixedJsonParser();
-
-        const fail = (error: Error) => {
-            this.failPending(error);
-            this.stream = null;
-            this.session = null;
-        };
-        session.on("error", fail);
-        stream.on("error", fail);
-        stream.on("close", () => fail(new Error("runner bridge stream closed")));
-        stream.on("data", (chunk: Buffer) => {
-            try {
-                for (const response of this.parser.feed(chunk)) {
-                    this.resolvePending(decodeBridgeResponse(response));
+        const frame = encodeJsonLine(request);
+        return await new Promise<BridgeResponse>((resolve, reject) => {
+            const parser = new JsonLineParser();
+            let settled = false;
+            const settle = (fn: () => void) => {
+                if (settled) {
+                    return;
                 }
-            } catch (error) {
-                this.failPending(error instanceof Error ? error : new Error(String(error)));
-                stream.close();
-            }
-        });
-
-        await new Promise<void>((resolve, reject) => {
-            stream.once("response", (headers) => {
+                settled = true;
+                fn();
+            };
+            const req = requestHttp(bridgeRequestOptions(this.bind, frame.length), (response) => {
                 try {
-                    validateBridgeResponseHeaders(headers);
-                    resolve();
+                    validateBridgeResponse(response);
                 } catch (error) {
-                    reject(error);
+                    settle(() =>
+                        reject(error instanceof Error ? error : new Error(String(error))),
+                    );
+                    response.destroy();
+                    req.destroy();
+                    return;
                 }
+                response.on("data", (chunk: Buffer) => {
+                    try {
+                        for (const item of parser.feed(chunk)) {
+                            const decoded = decodeBridgeResponse(item);
+                            if (decoded.id === id) {
+                                settle(() => resolve(decoded));
+                            }
+                        }
+                    } catch (error) {
+                        settle(() =>
+                            reject(error instanceof Error ? error : new Error(String(error))),
+                        );
+                    }
+                });
+                response.on("error", (error) => settle(() => reject(error)));
+                response.on("end", () => {
+                    settle(() =>
+                        reject(
+                            new Error(
+                                "runner bridge response ended without a matching response",
+                            ),
+                        ),
+                    );
+                });
             });
-            stream.once("error", reject);
-            session.once("error", reject);
-        }).catch((error) => {
-            stream.close();
-            session.close();
-            this.stream = null;
-            this.session = null;
-            throw error;
+            req.on("error", (error) => settle(() => reject(error)));
+            req.on("socket", (socket) => {
+                socket.setNoDelay?.(true);
+            });
+            req.end(frame);
         });
-    }
-
-    private resolvePending(response: BridgeResponse): void {
-        const pending = this.pending.get(response.id);
-        if (!pending) {
-            return;
-        }
-        this.pending.delete(response.id);
-        pending.resolve(response);
-    }
-
-    private failPending(error: Error): void {
-        for (const pending of this.pending.values()) {
-            pending.reject(error);
-        }
-        this.pending.clear();
     }
 }
 
-function encodeLengthPrefixedJsonFrame(value: unknown): Buffer {
+function encodeJsonLine(value: unknown): Buffer {
     const body = Buffer.from(JSON.stringify(value), "utf8");
     if (body.length > MAX_FRAME_BYTES) {
         throw new Error("runner bridge request frame exceeds maximum size");
     }
-    const header = Buffer.alloc(4);
-    header.writeUInt32BE(body.length, 0);
-    return Buffer.concat([header, body]);
+    return Buffer.concat([body, Buffer.from("\n")]);
 }
 
-class LengthPrefixedJsonParser {
+class JsonLineParser {
     private buffer = Buffer.alloc(0);
 
     feed(chunk: Buffer): unknown[] {
@@ -181,31 +105,37 @@ class LengthPrefixedJsonParser {
         }
 
         const parsed: unknown[] = [];
-        while (this.buffer.length >= FRAME_HEADER_BYTES) {
-            const bodyLength = this.buffer.readUInt32BE(0);
+        while (true) {
+            const lineEnd = this.buffer.indexOf(0x0a);
+            if (lineEnd < 0) {
+                break;
+            }
+            let body = this.buffer.subarray(0, lineEnd);
+            this.buffer = this.buffer.subarray(lineEnd + 1);
+            if (body.at(-1) === 0x0d) {
+                body = body.subarray(0, body.length - 1);
+            }
+            if (body.length === 0) {
+                continue;
+            }
+            const bodyLength = body.length;
             if (bodyLength > MAX_FRAME_BYTES) {
                 this.buffer = Buffer.alloc(0);
                 throw new Error("runner bridge frame exceeds maximum size");
             }
-            const frameLength = FRAME_HEADER_BYTES + bodyLength;
-            if (this.buffer.length < frameLength) {
-                break;
-            }
-            const body = this.buffer.subarray(FRAME_HEADER_BYTES, frameLength);
-            this.buffer = this.buffer.subarray(frameLength);
             parsed.push(JSON.parse(body.toString("utf8")));
         }
         return parsed;
     }
 }
 
-function validateBridgeResponseHeaders(headers: IncomingHttpHeaders): void {
-    const status = Number(headers[":status"]);
+function validateBridgeResponse(response: IncomingMessage): void {
+    const status = response.statusCode ?? 0;
     if (status !== 200) {
         throw new Error(`runner bridge open failed with status ${status || "unknown"}`);
     }
 
-    const contentType = headerValue(headers["content-type"])
+    const contentType = headerValue(response.headers["content-type"])
         .split(";")[0]
         .trim()
         .toLowerCase();
@@ -244,32 +174,35 @@ function decodeBridgeResponse(value: unknown): BridgeResponse {
     throw new Error("runner bridge response must include ok or error");
 }
 
-async function writeFrame(stream: ClientHttp2Stream, frame: Buffer): Promise<void> {
-    if (stream.write(frame)) {
-        return;
+function bridgeRequestOptions(bind: HostedBind, contentLength: number): RequestOptions {
+    const base: RequestOptions = {
+        method: "POST",
+        path: "/rpc",
+        headers: {
+            "content-type": BRIDGE_CONTENT_TYPE,
+            "content-length": String(contentLength),
+            "connection": "close",
+        },
+    };
+    if (bind.kind === "unix") {
+        return {
+            ...base,
+            socketPath: bind.path,
+            host: "localhost",
+        };
     }
-    await new Promise<void>((resolve, reject) => {
-        const cleanup = () => {
-            stream.off("drain", onDrain);
-            stream.off("error", onError);
-            stream.off("close", onClose);
+    if (bind.kind === "pipe") {
+        return {
+            ...base,
+            socketPath: bind.name,
+            host: "localhost",
         };
-        const onDrain = () => {
-            cleanup();
-            resolve();
-        };
-        const onError = (error: Error) => {
-            cleanup();
-            reject(error);
-        };
-        const onClose = () => {
-            cleanup();
-            reject(new Error("runner bridge stream closed"));
-        };
-        stream.once("drain", onDrain);
-        stream.once("error", onError);
-        stream.once("close", onClose);
-    });
+    }
+    return {
+        ...base,
+        host: bind.host,
+        port: bind.port,
+    };
 }
 
 function formatRpcError(error: unknown): string {
