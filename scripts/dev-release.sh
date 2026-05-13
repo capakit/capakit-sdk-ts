@@ -57,6 +57,15 @@ if ! git remote get-url origin >/dev/null 2>&1; then
   exit 1
 fi
 
+git fetch origin --tags
+remote_branch="refs/remotes/origin/$current_branch"
+if git rev-parse -q --verify "$remote_branch" >/dev/null; then
+  if ! git merge-base --is-ancestor "$remote_branch" HEAD; then
+    echo "local $current_branch is behind origin/$current_branch; pull/rebase before creating a dev release" >&2
+    exit 1
+  fi
+fi
+
 current_version="$(node -p "require('./package.json').version")"
 base_version="${current_version%%-*}"
 IFS=. read -r major minor patch <<<"$base_version"
@@ -70,7 +79,6 @@ sha="$(git rev-parse --short=8 HEAD)"
 dev_version="$major.$minor.$((patch + 1))-dev.$timestamp.$sha"
 dev_tag="dev/v$dev_version"
 
-git fetch --tags origin
 if git rev-parse -q --verify "refs/tags/$dev_tag" >/dev/null; then
   echo "tag already exists: $dev_tag" >&2
   exit 1

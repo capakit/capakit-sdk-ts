@@ -69,9 +69,17 @@ if ! git rev-parse -q --verify "refs/tags/$dev_tag" >/dev/null; then
   echo "unknown dev tag: $dev_tag" >&2
   exit 1
 fi
+if ! git ls-remote --exit-code --tags origin "refs/tags/$dev_tag" >/dev/null; then
+  echo "dev tag $dev_tag has not been pushed to origin" >&2
+  exit 1
+fi
 
 git switch main
 git pull --ff-only origin main
+if git merge-base --is-ancestor "$dev_tag" HEAD; then
+  echo "dev tag $dev_tag is already contained in main; create a new dev release first" >&2
+  exit 1
+fi
 git merge --ff-only "$dev_tag"
 
 npm ci
