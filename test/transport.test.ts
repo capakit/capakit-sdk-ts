@@ -1,10 +1,11 @@
 import { describe, expect, test } from "vitest";
-import { createServer } from "node:http2";
 
 import {
     clientAuthority,
     closeServer,
     createHostedFetch,
+    createHostedServer,
+    listen,
     parseBind,
 } from "../src/transport.ts";
 
@@ -55,21 +56,14 @@ describe("clientAuthority", () => {
 
 describe("createHostedFetch", () => {
     test("can issue repeated requests to the same bind", async () => {
-        const server = createServer();
-        server.on("stream", (stream, headers) => {
-            stream.respond({
-                ":status": 200,
-                "content-type": "application/json",
+        const server = createHostedServer(async (request) => {
+            const url = new URL(request.url);
+            return Response.json({
+                method: request.method,
+                path: `${url.pathname}${url.search}`,
             });
-            stream.end(JSON.stringify({
-                method: headers[":method"],
-                path: headers[":path"],
-            }));
         });
-
-        await new Promise<void>((resolve) => {
-            server.listen(0, "127.0.0.1", resolve);
-        });
+        await listen(server, { kind: "tcp", host: "127.0.0.1", port: 0 });
 
         try {
             const address = server.address();

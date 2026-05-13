@@ -2,18 +2,8 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import type { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
 import type { JSONRPCMessage } from "@modelcontextprotocol/sdk/types.js";
-import { connect as connectHttp2 } from "node:http2";
-import type {
-    ClientHttp2Session,
-    ClientHttp2Stream,
-    IncomingHttpHeaders,
-    ServerHttp2Stream,
-} from "node:http2";
 
-import {
-    clientAuthority,
-    clientConnectOptions,
-} from "./transport.ts";
+import { createHostedFetch } from "./transport.ts";
 import type { EndpointPath, HostedBind, McpSessionId } from "./public-types.ts";
 
 const MCP_STREAM_CONTENT_TYPE = "application/x-ndjson";
@@ -31,15 +21,16 @@ export class HostedMcpClientTransport implements Transport {
     onmessage?: (message: JSONRPCMessage) => void;
     sessionId?: McpSessionId;
 
-    private session: ClientHttp2Session | null = null;
-    private stream: ClientHttp2Stream | null = null;
     private started = false;
     private closed = false;
+    private readonly hostedFetch: typeof fetch;
 
     constructor(
-        private readonly bind: HostedBind,
+        bind: HostedBind,
         private readonly requestPath: EndpointPath,
-    ) {}
+    ) {
+        this.hostedFetch = createHostedFetch(bind);
+    }
 
     async start(): Promise<void> {
         if (this.started) {
@@ -47,62 +38,33 @@ export class HostedMcpClientTransport implements Transport {
         }
         this.started = true;
         this.closed = false;
-        const session = connectHttp2(
-            clientAuthority(this.bind),
-            clientConnectOptions(this.bind),
-        );
-        this.session = session;
-        session.on("error", (error) => {
-            this.onerror?.(error);
-        });
-        session.on("close", () => {
-            this.session = null;
-            this.stream = null;
-            if (!this.closed) {
-                this.onclose?.();
-            }
-        });
-
-        const stream = session.request({
-            ":method": "POST",
-            ":path": this.requestPath,
-            "content-type": MCP_STREAM_CONTENT_TYPE,
-        });
-        this.stream = stream;
-        stream.on("error", (error) => {
-            this.onerror?.(error);
-        });
-        stream.on("close", () => {
-            this.stream = null;
-            if (!this.closed) {
-                this.onclose?.();
-            }
-        });
-        void pipeJsonRpcMessages(stream, async (message) => {
-            this.onmessage?.(message);
-        });
-
-        await new Promise<void>((resolve, reject) => {
-            stream.once("response", () => resolve());
-            stream.once("error", reject);
-        });
     }
 
     async send(message: JSONRPCMessage): Promise<void> {
         await this.start();
-        const stream = this.stream;
-        if (!stream || stream.closed || stream.destroyed) {
+        if (this.closed) {
             throw new Error("hosted MCP client transport is closed");
         }
-        writeJsonRpcMessage(stream, message);
+        try {
+            const response = await this.hostedFetch(`http://capakit.local${this.requestPath}`, {
+                method: "POST",
+                headers: { "content-type": MCP_STREAM_CONTENT_TYPE },
+                body: `${JSON.stringify(message)}\n`,
+            });
+            const text = await response.text();
+            for (const item of parseJsonRpcLines(text)) {
+                this.onmessage?.(item);
+            }
+        } catch (error) {
+            const normalized = error instanceof Error ? error : new Error(String(error));
+            this.onerror?.(normalized);
+            throw normalized;
+        }
     }
 
     async close(): Promise<void> {
         this.closed = true;
-        this.stream?.end();
-        this.session?.close();
-        this.stream = null;
-        this.session = null;
+        this.onclose?.();
     }
 }
 
@@ -157,91 +119,34 @@ export class HostedMcpBridge {
         }
     }
 
-    async handleStream(
-        stream: ServerHttp2Stream,
-        _headers: IncomingHttpHeaders,
-    ): Promise<void> {
-        let processing = Promise.resolve();
-        let writing = Promise.resolve();
-        let responded = false;
-        const responseHeaders = {
-            ":status": 200,
-            "content-type": "application/x-ndjson",
-        };
-
-        const ensureResponseStarted = () => {
-            if (responded || stream.destroyed || stream.closed) {
-                return;
-            }
-            stream.respond(responseHeaders);
-            responded = true;
-        };
-        ensureResponseStarted();
-
+    async handleRequest(request: Request): Promise<Response> {
+        let output = "";
         const writeMessage = async (message: JSONRPCMessage) => {
-            writing = writing.then(async () => {
-                if (stream.destroyed || stream.closed) {
-                    return;
-                }
-                ensureResponseStarted();
-                writeJsonRpcMessage(stream, message);
-            });
-            return writing;
+            output += `${JSON.stringify(message)}\n`;
         };
 
-        const outboundHandler = (message: JSONRPCMessage) => writeMessage(message);
-        const inbound = pipeJsonRpcMessages(stream, async (message) => {
-            processing = processing.then(async () => {
-                try {
-                    const response = await this.handleMessage(message, outboundHandler);
-                    if (response) {
-                        await writeMessage(response);
-                    }
-                } catch (error) {
-                    if (hasRequestId(message)) {
-                        await writeMessage(
-                            encodeRpcError(
-                                message.id,
-                                -32603,
-                                error instanceof Error ? error.message : "internal error",
-                            ),
-                        );
-                    }
+        for (const message of parseJsonRpcLines(await request.text())) {
+            try {
+                const response = await this.handleMessage(message, writeMessage);
+                if (response) {
+                    await writeMessage(response);
                 }
-            });
-            await processing;
-        });
+            } catch (error) {
+                if (hasRequestId(message)) {
+                    await writeMessage(
+                        encodeRpcError(
+                            message.id,
+                            -32603,
+                            error instanceof Error ? error.message : "internal error",
+                        ),
+                    );
+                }
+            }
+        }
 
-        stream.on("end", () => {
-            void Promise.all([inbound, processing, writing]).then(() => {
-                if (stream.destroyed || stream.closed) {
-                    return;
-                }
-                ensureResponseStarted();
-                stream.end();
-            }).catch((error) => {
-                if (!stream.destroyed && !stream.closed) {
-                    if (!responded) {
-                        stream.respond({
-                            ":status": 500,
-                            "content-type": "application/json",
-                        });
-                        stream.end(
-                            JSON.stringify(
-                                encodeRpcError(
-                                    null,
-                                    -32603,
-                                    error instanceof Error
-                                        ? error.message
-                                        : "internal error",
-                                ),
-                            ),
-                        );
-                        return;
-                    }
-                    stream.end();
-                }
-            });
+        return new Response(output, {
+            status: 200,
+            headers: { "content-type": MCP_STREAM_CONTENT_TYPE },
         });
     }
 
@@ -366,68 +271,10 @@ function encodeRpcError(
     };
 }
 
-function pipeJsonRpcMessages(
-    stream: ServerHttp2Stream | ClientHttp2Stream,
-    onMessage: (message: JSONRPCMessage) => Promise<void> | void,
-): Promise<void> {
-    let buffer = "";
-    let drain = Promise.resolve();
-    let settled = false;
-
-    const finish = () => {
-        if (settled) {
-            return drain;
-        }
-        settled = true;
-        const tail = buffer.trim();
-        if (tail.length === 0) {
-            return drain;
-        }
-        drain = drain.then(async () => {
-            await onMessage(parseJsonRpcMessage(tail));
-            buffer = "";
-        });
-        return drain;
-    };
-
-    stream.on("data", (chunk: Buffer) => {
-        buffer += chunk.toString("utf8");
-        drain = drain.then(async () => {
-            let newlineIndex = buffer.indexOf("\n");
-            while (newlineIndex >= 0) {
-                const raw = buffer.slice(0, newlineIndex).trim();
-                buffer = buffer.slice(newlineIndex + 1);
-                if (raw.length > 0) {
-                    await onMessage(parseJsonRpcMessage(raw));
-                }
-                newlineIndex = buffer.indexOf("\n");
-            }
-        });
-        void drain.catch((error) => {
-            stream.emit("error", error);
-        });
-    });
-    return new Promise<void>((resolve, reject) => {
-        stream.on("end", () => {
-            void finish().then(resolve).catch((error) => {
-                stream.emit("error", error);
-                reject(error);
-            });
-        });
-        stream.on("close", () => {
-            void finish().then(resolve).catch(reject);
-        });
-        stream.on("error", reject);
-    });
-}
-
-function writeJsonRpcMessage(
-    stream: ServerHttp2Stream | ClientHttp2Stream,
-    message: JSONRPCMessage,
-): void {
-    stream.write(`${JSON.stringify(message)}\n`);
-}
-
-function parseJsonRpcMessage(raw: string): JSONRPCMessage {
-    return JSON.parse(raw) as JSONRPCMessage;
+function parseJsonRpcLines(raw: string): JSONRPCMessage[] {
+    return raw
+        .split("\n")
+        .map((line) => line.trim())
+        .filter((line) => line.length > 0)
+        .map((line) => JSON.parse(line) as JSONRPCMessage);
 }

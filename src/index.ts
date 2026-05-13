@@ -1,11 +1,6 @@
 import { existsSync } from "node:fs";
-import { createServer } from "node:http2";
 import { execFileSync } from "node:child_process";
-import type {
-    Http2Server,
-    IncomingHttpHeaders,
-    ServerHttp2Stream,
-} from "node:http2";
+import type { Server as HttpServer } from "node:http";
 
 import {
     HostedMcpBridge,
@@ -33,11 +28,10 @@ import { loadRunnerEnv } from "./runner-env.ts";
 import type { RunnerEnv } from "./runner-env.ts";
 import {
     closeServer,
+    createHostedServer,
     listen,
     parseBind,
-    readRequestBody,
     removeSocket,
-    writeFetchResponse,
 } from "./transport.ts";
 import { RunnerWorkloadsImpl } from "./workloads.ts";
 
@@ -48,10 +42,7 @@ type MountedHttpTransport = {
     endpoint: EndpointPath;
     start?: () => Promise<void>;
     stop?: () => Promise<void>;
-    handleStream: (
-        stream: ServerHttp2Stream,
-        headers: IncomingHttpHeaders,
-    ) => Promise<void>;
+    handleRequest: (request: Request) => Promise<Response>;
 };
 
 class HostedRunnerSdk implements RunnerSdk {
@@ -65,7 +56,7 @@ class HostedRunnerSdk implements RunnerSdk {
     private readonly onPresenceStart?: RunnerPresenceLifecycleHook;
     private readonly onShutdown?: RunnerShutdownHook;
     private readonly mountedTransports = new Map<string, MountedHttpTransport>();
-    private server: Http2Server | null = null;
+    private server: HttpServer | null = null;
     private stopPromise: Promise<void> | null = null;
     private parentMonitor?: ReturnType<typeof setInterval>;
     private orphanExitTimer?: ReturnType<typeof setTimeout>;
@@ -122,10 +113,7 @@ class HostedRunnerSdk implements RunnerSdk {
             await mount.start?.();
         }
         await this.onPresenceStart?.(this.lifecycleContext());
-        const server = createServer();
-        server.on("stream", (stream, headers) => {
-            void this.handleStream(stream as ServerHttp2Stream, headers);
-        });
+        const server = createHostedServer((request) => this.handleRequest(request));
         await listen(server, this.bind);
         this.server = server;
         this.installSignalHandlers();
@@ -293,41 +281,31 @@ class HostedRunnerSdk implements RunnerSdk {
         }
     }
 
-    private async handleStream(
-        stream: ServerHttp2Stream,
-        headers: IncomingHttpHeaders,
-    ): Promise<void> {
+    private async handleRequest(request: Request): Promise<Response> {
         try {
-            const requestPath = headerValue(headers[":path"]) ?? "/";
+            const requestPath = new URL(request.url).pathname;
             const transport = this.resolveMountedTransport(requestPath);
             if (!transport) {
-                await writeFetchResponse(
-                    stream,
-                    new Response(JSON.stringify({ error: "not found" }), {
-                        status: 404,
-                        headers: {
-                            "content-type": "application/json; charset=utf-8",
-                        },
-                    }),
-                );
-                return;
+                return new Response(JSON.stringify({ error: "not found" }), {
+                    status: 404,
+                    headers: {
+                        "content-type": "application/json; charset=utf-8",
+                    },
+                });
             }
 
-            await transport.handleStream(stream, headers);
+            return await transport.handleRequest(request);
         } catch (error) {
-            await writeFetchResponse(
-                stream,
-                new Response(
-                    JSON.stringify({
-                        error: error instanceof Error ? error.message : "internal error",
-                    }),
-                    {
-                        status: 500,
-                        headers: {
-                            "content-type": "application/json; charset=utf-8",
-                        },
+            return new Response(
+                JSON.stringify({
+                    error: error instanceof Error ? error.message : "internal error",
+                }),
+                {
+                    status: 500,
+                    headers: {
+                        "content-type": "application/json; charset=utf-8",
                     },
-                ),
+                },
             );
         }
     }
@@ -346,7 +324,7 @@ class HostedRunnerSdk implements RunnerSdk {
             endpoint: mount.endpoint,
             start: () => mcpBridge.start(),
             stop: () => mcpBridge.stop(),
-            handleStream: (stream, headers) => mcpBridge.handleStream(stream, headers),
+            handleRequest: (request) => mcpBridge.handleRequest(request),
         };
     }
 
@@ -369,25 +347,15 @@ class HostedRunnerSdk implements RunnerSdk {
     ): MountedHttpTransport {
         return {
             endpoint,
-            handleStream: async (stream, headers) => {
-                const method = headerValue(headers[":method"]) ?? "GET";
-                const body =
-                    method === "GET" || method === "HEAD"
-                        ? undefined
-                        : await readRequestBody(stream) ?? undefined;
-                const response = await handler(
-                    new Request(`http://capakit.local${headerValue(headers[":path"]) ?? "/"}`, {
-                        method,
-                        headers: requestHeaders(headers),
-                        body: body ? new Blob([Uint8Array.from(body)]) : undefined,
-                    }),
+            handleRequest: async (request) => {
+                return await handler(
+                    request,
                     {
                         ...this.lifecycleContext(),
                         protocol,
                         endpoint,
                     },
                 );
-                await writeFetchResponse(stream, response);
             },
         };
     }
@@ -437,29 +405,6 @@ function processExists(pid: number): boolean {
     } catch (error) {
         return (error as NodeJS.ErrnoException).code === "EPERM";
     }
-}
-
-function headerValue(
-    value: string | string[] | number | undefined,
-): string | undefined {
-    if (Array.isArray(value)) {
-        return value[0];
-    }
-    if (value === undefined) {
-        return undefined;
-    }
-    return String(value);
-}
-
-function requestHeaders(headers: IncomingHttpHeaders): Headers {
-    const flattened = new Headers();
-    for (const [key, value] of Object.entries(headers)) {
-        if (key.startsWith(":") || value === undefined) {
-            continue;
-        }
-        flattened.set(key, Array.isArray(value) ? value.join(", ") : String(value));
-    }
-    return flattened;
 }
 
 function pathMatchesEndpoint(path: string, endpoint: EndpointPath): boolean {
