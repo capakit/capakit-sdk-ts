@@ -10,7 +10,7 @@ Creates a unique dev release tag from the dev branch.
 The script:
   - requires a clean working tree
   - requires the current branch to be dev unless --allow-branch is provided
-  - derives X.Y.(Z+1)-dev.YYYYMMDDHHMMSS.sha from package.json and HEAD
+  - derives X.Y.(Z+1)-dev.YYYYMMDDHHMMSS.sha from the newer of package.json and the latest production tag
   - runs checks unless --skip-checks is provided
   - creates an annotated git tag named dev/vX.Y.Z-dev...
   - pushes the branch and tag unless --skip-push is provided
@@ -67,10 +67,42 @@ if git rev-parse -q --verify "$remote_branch" >/dev/null; then
 fi
 
 current_version="$(node -p "require('./package.json').version")"
-base_version="${current_version%%-*}"
+latest_prod_tag="$(
+  git tag --list 'v[0-9]*.[0-9]*.[0-9]*' --sort=-v:refname \
+    | head -n 1
+)"
+latest_prod_version="${latest_prod_tag#v}"
+base_version="$(
+  node - "$current_version" "$latest_prod_version" <<'NODE'
+const [currentRaw, latestProdRaw] = process.argv.slice(2);
+
+function parse(version) {
+  if (!version) return null;
+  const match = version.split("-")[0].match(/^(\d+)\.(\d+)\.(\d+)$/);
+  if (!match) return null;
+  return match.slice(1).map(Number);
+}
+
+function compare(a, b) {
+  for (let i = 0; i < 3; i += 1) {
+    if (a[i] !== b[i]) return a[i] - b[i];
+  }
+  return 0;
+}
+
+const current = parse(currentRaw);
+const latestProd = parse(latestProdRaw);
+if (!current) {
+  console.error(`invalid package version: ${currentRaw}`);
+  process.exit(1);
+}
+const base = latestProd && compare(latestProd, current) > 0 ? latestProd : current;
+console.log(base.join("."));
+NODE
+)"
 IFS=. read -r major minor patch <<<"$base_version"
 if [[ -z "${major:-}" || -z "${minor:-}" || -z "${patch:-}" ]]; then
-  echo "invalid package version: $current_version" >&2
+  echo "invalid dev release base version: $base_version" >&2
   exit 1
 fi
 
