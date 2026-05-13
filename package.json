@@ -29,7 +29,8 @@
         "typecheck": "tsc --noEmit",
         "check": "npm run typecheck && npm test",
         "pack:dry-run": "npm pack --dry-run",
-        "publish:dev": "scripts/dev-release.sh"
+        "dev-release": "scripts/dev-release.sh",
+        "release": "scripts/release.sh"
     },
     "dependencies": {
         "@a2a-js/sdk": "^0.3.4",

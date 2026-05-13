@@ -3,29 +3,42 @@ set -euo pipefail
 
 usage() {
   cat <<'EOF'
-Usage: scripts/release.sh [small|mid|large]
+Usage: scripts/release.sh [small|mid|large] [--dev-tag dev/vX.Y.Z-dev...]
 
 small  Bump patch version. Default.
 mid    Bump minor version and reset patch.
 large  Bump major version and reset minor/patch.
 
 The script:
+  - requires a clean working tree
+  - fetches origin/main, origin/dev, and tags
+  - promotes the latest dev release tag to main with a fast-forward merge
   - runs npm checks
-  - derives the last release from git tags matching vX.Y.Z
-  - uses 0.0.1 as the first release when no version tag exists
   - updates package.json and package-lock.json
-  - commits, tags, and pushes branch + tag
+  - commits, creates vX.Y.Z, and pushes main + tag
 
-Pushing the tag triggers .github/workflows/publish.yml.
+Pushing the production tag triggers .github/workflows/publish.yml.
 EOF
 }
 
-bump_kind="${1:-small}"
-case "$bump_kind" in
-  small|mid|large) ;;
-  -h|--help) usage; exit 0 ;;
-  *) echo "invalid bump kind: $bump_kind" >&2; usage >&2; exit 2 ;;
-esac
+bump_kind="small"
+dev_tag=""
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    small|mid|large) bump_kind="$1" ;;
+    --dev-tag)
+      if [[ $# -lt 2 ]]; then
+        echo "--dev-tag requires a value" >&2
+        exit 2
+      fi
+      dev_tag="$2"
+      shift
+      ;;
+    -h|--help) usage; exit 0 ;;
+    *) echo "invalid argument: $1" >&2; usage >&2; exit 2 ;;
+  esac
+  shift
+done
 
 repo_root="$(git rev-parse --show-toplevel)"
 cd "$repo_root"
@@ -35,22 +48,35 @@ if [[ -n "$(git status --porcelain)" ]]; then
   exit 1
 fi
 
-current_branch="$(git branch --show-current)"
-if [[ -z "$current_branch" ]]; then
-  echo "not on a branch" >&2
-  exit 1
-fi
-
 if ! git remote get-url origin >/dev/null 2>&1; then
   echo "missing git remote: origin" >&2
   exit 1
 fi
 
+git fetch origin main dev --tags
+
+if [[ -z "$dev_tag" ]]; then
+  dev_tag="$(
+    git tag --list 'dev/v[0-9]*.[0-9]*.[0-9]*-dev.*' --sort=-creatordate \
+      | head -n 1
+  )"
+fi
+if [[ -z "$dev_tag" ]]; then
+  echo "no dev release tag found; run scripts/dev-release.sh from branch dev first" >&2
+  exit 1
+fi
+if ! git rev-parse -q --verify "refs/tags/$dev_tag" >/dev/null; then
+  echo "unknown dev tag: $dev_tag" >&2
+  exit 1
+fi
+
+git switch main
+git pull --ff-only origin main
+git merge --ff-only "$dev_tag"
+
 npm ci
 npm run check
 npm run pack:dry-run
-
-git fetch --tags origin
 
 last_tag="$(
   git tag --list 'v[0-9]*.[0-9]*.[0-9]*' --sort=-v:refname \
@@ -82,7 +108,7 @@ git add package.json package-lock.json
 git commit -m "Release $next_version"
 git tag -a "$next_tag" -m "Release $next_version"
 
-git push origin "$current_branch"
+git push origin main
 git push origin "$next_tag"
 
-echo "Released $next_version via $next_tag"
+echo "Released $next_version via $next_tag from $dev_tag"

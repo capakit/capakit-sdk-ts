@@ -2,10 +2,9 @@ name: Publish to npm
 
 on:
   push:
-    branches:
-      - main
     tags:
       - "v*.*.*"
+      - "dev/v*.*.*-dev.*"
   workflow_dispatch:
 
 jobs:
@@ -39,7 +38,7 @@ jobs:
       - run: npm publish --access public
 
   publish-dev:
-    if: github.ref == 'refs/heads/main'
+    if: startsWith(github.ref, 'refs/tags/dev/v')
     runs-on: ubuntu-latest
 
     permissions:
@@ -57,6 +56,11 @@ jobs:
 
       - run: npm ci
 
+      - name: Stamp dev package version from tag
+        run: |
+          dev_version="${GITHUB_REF_NAME#dev/v}"
+          npm version "$dev_version" --no-git-tag-version --allow-same-version
+
       - run: npm run check
 
-      - run: npm run publish:dev -- --skip-checks
+      - run: npm publish --access public --tag dev
