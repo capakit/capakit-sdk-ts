@@ -221,6 +221,9 @@ async function handleFramedHttpRequest(
             throw new Error("hosted framed request is missing start frame");
         }
         const end = frames.find((frame): frame is Extract<BodyFrame, { type: "end" }> => frame.type === "end");
+        if (!end) {
+            throw new Error("hosted framed request is missing end frame");
+        }
         if (end?.error) {
             throw new Error(formatWireError(end.error));
         }
@@ -301,14 +304,20 @@ function responseFromFrames(frames: BodyFrame[]): Response {
     if (end?.error) {
         throw new Error(formatWireError(end.error));
     }
+    if (!start) {
+        throw new Error("hosted framed response is missing start frame");
+    }
+    if (!end) {
+        throw new Error("hosted framed response is missing end frame");
+    }
     const body = Buffer.concat(
         frames
             .filter((frame): frame is Extract<BodyFrame, { type: "data" }> => frame.type === "data")
             .map((frame) => Buffer.from(frame.chunk, "base64")),
     );
     return new Response(body, {
-        status: start?.headers.pseudo.status ?? 200,
-        headers: start ? responseHeadersToWeb(start.headers.raw) : undefined,
+        status: start.headers.pseudo.status ?? 200,
+        headers: responseHeadersToWeb(start.headers.raw),
     });
 }
 
@@ -332,7 +341,21 @@ function decodeBodyFrames(body: Buffer): BodyFrame[] {
         .split("\n")
         .map((line) => line.trim())
         .filter((line) => line.length > 0)
-        .map((line) => JSON.parse(line) as BodyFrame);
+        .map((line, index) => decodeBodyFrame(line, index));
+}
+
+function decodeBodyFrame(line: string, index: number): BodyFrame {
+    const frame = JSON.parse(line) as { type?: string };
+    const frameType = frame.type;
+    switch (frameType) {
+        case "start":
+        case "data":
+        case "end":
+            return frame as BodyFrame;
+        default: {
+            throw new Error(`hosted framed frame ${index} has unsupported type \`${frameType ?? "unknown"}\``);
+        }
+    }
 }
 
 async function readIncomingBody(stream: IncomingMessage): Promise<Buffer> {
