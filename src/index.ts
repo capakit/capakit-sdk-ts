@@ -7,6 +7,7 @@ import {
 } from "./mcp.ts";
 import { createA2aHandler } from "./a2a.ts";
 import { installHostConsoleLogging } from "./logging.ts";
+import { RunnerMountsImpl } from "./mounts.ts";
 import { RunnerSecretsImpl } from "./secrets.ts";
 import type {
     EndpointPath,
@@ -21,6 +22,7 @@ import type {
     RunnerShutdownHook,
     RunnerShutdownCause,
     RunnerSignal,
+    RunnerMounts,
     RunnerWorkloads,
     RunnerSecrets,
 } from "./public-types.ts";
@@ -48,6 +50,7 @@ type MountedHttpTransport = {
 class HostedRunnerSdk implements RunnerSdk {
     readonly workloads: RunnerWorkloads;
     readonly secrets: RunnerSecrets;
+    readonly mounts: RunnerMounts;
 
     private readonly bind: HostedBind;
     private readonly env: RunnerEnv;
@@ -73,6 +76,7 @@ class HostedRunnerSdk implements RunnerSdk {
         this.onShutdown = options.onShutdown;
         this.workloads = new RunnerWorkloadsImpl(this.env);
         this.secrets = new RunnerSecretsImpl(this.env);
+        this.mounts = new RunnerMountsImpl(this.env);
     }
 
     mount(mount: RunnerSdkMount): void {

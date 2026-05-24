@@ -19,7 +19,9 @@ export type McpSessionId = string;
 export type EndpointPath = Brand<string, "EndpointPath">;
 export type WorkloadMid = Brand<string, "WorkloadMid">;
 export type SecretMid = Brand<string, "SecretMid">;
+export type HostMountMid = Brand<string, "HostMountMid">;
 export type RunnerProtocol = "mcp" | "oaic" | "a2a";
+export type HostMountAccess = "read_only" | "read_write";
 
 export type HostedBind =
     | { kind: "unix"; path: string }
@@ -39,6 +41,10 @@ export function workloadMid(value: string): WorkloadMid {
 
 export function secretMid(value: string): SecretMid {
     return value as SecretMid;
+}
+
+export function hostMountMid(value: string): HostMountMid {
+    return value as HostMountMid;
 }
 
 export type ClientOptions = {
@@ -85,6 +91,17 @@ export type RunnerWorkloads = {
 export type RunnerSecrets = {
     resolve(secretMid: SecretMid): Promise<string>;
     close(): Promise<void>;
+};
+
+export type HostMount = {
+    mid: HostMountMid;
+    path: string;
+    access: HostMountAccess;
+};
+
+export type RunnerMounts = {
+    get(mountMid: HostMountMid): HostMount | undefined;
+    list(): readonly HostMount[];
 };
 
 export type RunnerSdkOptions = {
@@ -152,6 +169,7 @@ export type RunnerShutdownHook = (
 export type RunnerSdk = {
     readonly workloads: RunnerWorkloads;
     readonly secrets: RunnerSecrets;
+    readonly mounts: RunnerMounts;
     mount(mount: RunnerSdkMount): void;
     hijackConsoleLogging(): () => void;
     start(): Promise<void>;

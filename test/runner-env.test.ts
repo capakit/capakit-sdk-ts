@@ -2,6 +2,7 @@ import { describe, expect, test } from "vitest";
 
 import {
     loadConnectedWorkloadConfigs,
+    loadHostMountConfigs,
     loadRunnerEnv,
     requireRunnerBridgeBind,
     RUNNER_ENV_KEYS,
@@ -23,6 +24,13 @@ describe("loadRunnerEnv", () => {
             [RUNNER_ENV_KEYS.runnerSid]: "sid:runner/dev",
             [RUNNER_ENV_KEYS.presenceId]: "presence-1",
             [RUNNER_ENV_KEYS.workloadMid]: "mid:self/workload",
+            [RUNNER_ENV_KEYS.mounts]: JSON.stringify({
+                docs: {
+                    mid: "docs",
+                    path: "/Users/me/docs",
+                    access: "read_write",
+                },
+            }),
         });
 
         expect(env.managedIngressBind).toBe("unix:/tmp/capakit.sock");
@@ -30,6 +38,13 @@ describe("loadRunnerEnv", () => {
         expect(env.runnerSid).toBe("sid:runner/dev");
         expect(env.presenceId).toBe("presence-1");
         expect(env.workloadMid).toBe("mid:self/workload");
+        expect(env.mounts).toEqual([
+            {
+                mid: "docs",
+                path: "/Users/me/docs",
+                access: "read_write",
+            },
+        ]);
         expect(env.connectedWorkloads).toEqual([
             {
                 workloadMid: "mid:capability/workload",
@@ -42,6 +57,42 @@ describe("loadRunnerEnv", () => {
 
     test("requires managed ingress bind", () => {
         expect(() => loadRunnerEnv({})).toThrow(/CAPAKIT_RUNNER_MANAGED_INGRESS_BIND/);
+    });
+});
+
+describe("loadHostMountConfigs", () => {
+    test("defaults to no host mounts", () => {
+        expect(loadHostMountConfigs({})).toEqual([]);
+    });
+
+    test("loads host mount configs", () => {
+        expect(loadHostMountConfigs({
+            [RUNNER_ENV_KEYS.mounts]: JSON.stringify({
+                docs: {
+                    mid: "docs",
+                    path: "/Users/me/docs",
+                    access: "read_only",
+                },
+            }),
+        })).toEqual([
+            {
+                mid: "docs",
+                path: "/Users/me/docs",
+                access: "read_only",
+            },
+        ]);
+    });
+
+    test("rejects unsupported access modes", () => {
+        expect(() => loadHostMountConfigs({
+            [RUNNER_ENV_KEYS.mounts]: JSON.stringify({
+                docs: {
+                    mid: "docs",
+                    path: "/Users/me/docs",
+                    access: "admin",
+                },
+            }),
+        })).toThrow(/unsupported host mount access/);
     });
 });
 
@@ -68,6 +119,7 @@ describe("requireRunnerBridgeBind", () => {
     test("returns configured bridge bind", () => {
         expect(requireRunnerBridgeBind({
             connectedWorkloads: [],
+            mounts: [],
             managedIngressBind: "tcp:127.0.0.1:4100",
             runnerBridgeBind: "tcp:127.0.0.1:4200",
         })).toBe("tcp:127.0.0.1:4200");
@@ -76,6 +128,7 @@ describe("requireRunnerBridgeBind", () => {
     test("rejects missing bridge bind", () => {
         expect(() => requireRunnerBridgeBind({
             connectedWorkloads: [],
+            mounts: [],
             managedIngressBind: "tcp:127.0.0.1:4100",
         })).toThrow(/CAPAKIT_RUNNER_BRIDGE_BIND/);
     });

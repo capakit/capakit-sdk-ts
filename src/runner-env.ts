@@ -1,14 +1,17 @@
 import {
     endpointPath,
+    hostMountMid,
     workloadMid,
 } from "./public-types.ts";
 import type {
     EndpointPath,
+    HostMount,
     HostedBindValue,
     PresenceId,
     RunnerProtocol,
     WorkloadMid,
 } from "./public-types.ts";
+import { normalizeMountAccess } from "./mounts.ts";
 
 export const RUNNER_ENV_KEYS = {
     connectedWorkloads: "CAPAKIT_CONNECTED_WORKLOADS",
@@ -19,6 +22,7 @@ export const RUNNER_ENV_KEYS = {
     runnerSid: "CAPAKIT_RUNNER_SID",
     presenceId: "CAPAKIT_PRESENCE_ID",
     workloadMid: "CAPAKIT_WORKLOAD_MID",
+    mounts: "CAPAKIT_MOUNTS_JSON",
 } as const;
 
 export type RunnerHostBackend =
@@ -33,6 +37,7 @@ export type RunnerHostBackend =
 
 export type RunnerEnv = {
     connectedWorkloads: HostedWorkloadConnectionConfig[];
+    mounts: HostMount[];
     managedIngressBind: HostedBindValue;
     runnerHostBackend?: RunnerHostBackend;
     runnerHostPid?: number;
@@ -52,6 +57,7 @@ export type HostedWorkloadConnectionConfig = {
 export function loadRunnerEnv(env: NodeJS.ProcessEnv = process.env): RunnerEnv {
     return {
         connectedWorkloads: loadConnectedWorkloadConfigs(env),
+        mounts: loadHostMountConfigs(env),
         managedIngressBind: requiredEnv(env, RUNNER_ENV_KEYS.managedIngressBind),
         runnerHostBackend: optionalHostBackend(env[RUNNER_ENV_KEYS.runnerHostBackend]),
         runnerHostPid: optionalPositiveInt(env[RUNNER_ENV_KEYS.runnerHostPid]),
@@ -76,11 +82,43 @@ export function loadConnectedWorkloadConfigs(
     return parsed.map((value) => normalizeConnectedWorkload(value));
 }
 
+export function loadHostMountConfigs(
+    env: NodeJS.ProcessEnv = process.env,
+): HostMount[] {
+    const raw = env[RUNNER_ENV_KEYS.mounts];
+    if (!raw) {
+        return [];
+    }
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+        throw new Error(`${RUNNER_ENV_KEYS.mounts} must be a JSON object`);
+    }
+    return Object.entries(parsed).map(([key, value]) =>
+        normalizeHostMountConfig(key, value),
+    );
+}
+
 export function requireRunnerBridgeBind(env: RunnerEnv): HostedBindValue {
     if (!env.runnerBridgeBind) {
         throw new Error(`${RUNNER_ENV_KEYS.runnerBridgeBind} is required`);
     }
     return env.runnerBridgeBind;
+}
+
+function normalizeHostMountConfig(key: string, value: unknown): HostMount {
+    if (!value || typeof value !== "object" || Array.isArray(value)) {
+        throw new Error("host mount entry must be an object");
+    }
+    const record = value as Record<string, unknown>;
+    const mid = stringField(record, "mid");
+    if (mid !== key) {
+        throw new Error(`host mount entry key \`${key}\` does not match mid \`${mid}\``);
+    }
+    return {
+        mid: hostMountMid(mid),
+        path: stringField(record, "path"),
+        access: normalizeMountAccess(record.access),
+    };
 }
 
 function normalizeConnectedWorkload(value: unknown): HostedWorkloadConnectionConfig {
