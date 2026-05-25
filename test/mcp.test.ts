@@ -48,6 +48,21 @@ describe("HostedMcpBridge", () => {
         });
     });
 
+    test("honors response content negotiation order", async () => {
+        const response = await bridgeResponse({
+            accept: "application/json, text/event-stream",
+            contentType: "application/json",
+            body: JSON.stringify(requestMessage(4)),
+        });
+
+        expect(response.headers.get("content-type")).toBe("application/json; charset=utf-8");
+        expect(await response.json()).toMatchObject({
+            jsonrpc: "2.0",
+            id: 4,
+            error: { code: -32603 },
+        });
+    });
+
     test("accepts notification-only requests without a response stream", async () => {
         const response = await bridgeResponse({
             accept: "text/event-stream, application/json",

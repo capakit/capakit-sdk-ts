@@ -302,11 +302,13 @@ function parseJsonRpcMessages(raw: string, contentType: string | null): JSONRPCM
 
 function negotiateResponseFormat(request: Request): McpResponseFormat {
     const accept = request.headers.get("accept") ?? "";
-    if (accepts(accept, "text/event-stream")) {
-        return "sse";
-    }
-    if (accepts(accept, "application/json")) {
-        return "json";
+    for (const entry of acceptedMediaTypes(accept)) {
+        if (entry === "text/event-stream") {
+            return "sse";
+        }
+        if (entry === "application/json") {
+            return "json";
+        }
     }
     return "ndjson";
 }
@@ -341,11 +343,11 @@ function isJsonContentType(contentType: string | null): boolean {
     return mediaType(contentType) === "application/json";
 }
 
-function accepts(accept: string, target: string): boolean {
+function acceptedMediaTypes(accept: string): string[] {
     return accept
         .split(",")
         .map((entry) => mediaType(entry))
-        .some((entry) => entry === target || entry === "*/*");
+        .filter((entry) => entry.length > 0);
 }
 
 function mediaType(value: string | null): string {
