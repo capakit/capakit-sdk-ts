@@ -137,6 +137,7 @@ function normalizeConnectedWorkload(value: unknown): HostedWorkloadConnectionCon
 function protocolField(record: Record<string, unknown>): RunnerProtocol {
     const protocol = stringField(record, "protocol");
     switch (protocol) {
+        case "http":
         case "mcp":
         case "oaic":
         case "a2a":

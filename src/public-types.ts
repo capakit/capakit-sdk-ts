@@ -20,7 +20,7 @@ export type EndpointPath = Brand<string, "EndpointPath">;
 export type WorkloadMid = Brand<string, "WorkloadMid">;
 export type SecretMid = Brand<string, "SecretMid">;
 export type HostMountMid = Brand<string, "HostMountMid">;
-export type RunnerProtocol = "mcp" | "oaic" | "a2a";
+export type RunnerProtocol = "http" | "mcp" | "oaic" | "a2a";
 export type HostMountAccess = "read_only" | "read_write";
 
 export type HostedBind =
@@ -132,6 +132,12 @@ export type RunnerOaicMount = {
     handler: RunnerHttpHandler;
 };
 
+export type RunnerHttpMount = {
+    protocol: "http";
+    endpoint: EndpointPath;
+    handler: RunnerHttpHandler;
+};
+
 export type RunnerA2aMount = {
     protocol: "a2a";
     endpoint: EndpointPath;
@@ -140,7 +146,11 @@ export type RunnerA2aMount = {
     taskStore?: TaskStore;
 };
 
-export type RunnerSdkMount = RunnerMcpMount | RunnerOaicMount | RunnerA2aMount;
+export type RunnerSdkMount =
+    | RunnerMcpMount
+    | RunnerHttpMount
+    | RunnerOaicMount
+    | RunnerA2aMount;
 
 export type RunnerSignal = "SIGINT" | "SIGTERM";
 

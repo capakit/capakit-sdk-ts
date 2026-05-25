@@ -15,7 +15,7 @@ describe("loadRunnerEnv", () => {
                 {
                     workloadMid: "mid:capability/workload",
                     endpoint: "chat",
-                    protocol: "oaic",
+                    protocol: "http",
                     bind: "tcp:127.0.0.1:4100",
                 },
             ]),
@@ -49,7 +49,7 @@ describe("loadRunnerEnv", () => {
             {
                 workloadMid: "mid:capability/workload",
                 endpoint: "/chat",
-                protocol: "oaic",
+                protocol: "http",
                 bind: "tcp:127.0.0.1:4100",
             },
         ]);

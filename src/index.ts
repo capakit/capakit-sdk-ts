@@ -15,6 +15,7 @@ import type {
     RunnerA2aMount,
     RunnerPresenceLifecycleContext,
     RunnerPresenceLifecycleHook,
+    RunnerHttpMount,
     RunnerOaicMount,
     RunnerSdk,
     RunnerSdkMount,
@@ -83,6 +84,15 @@ class HostedRunnerSdk implements RunnerSdk {
         switch (mount.protocol) {
             case "mcp":
                 this.mountHttpTransport(this.mcpServerTransport(mount));
+                return;
+            case "http":
+                this.mountHttpTransport(
+                    this.runnerHttpHandlerTransport(
+                        "http",
+                        mount.endpoint,
+                        mount.handler,
+                    ),
+                );
                 return;
             case "oaic":
                 this.mountHttpTransport(
@@ -345,9 +355,12 @@ class HostedRunnerSdk implements RunnerSdk {
     }
 
     private runnerHttpHandlerTransport(
-        protocol: RunnerOaicMount["protocol"] | RunnerA2aMount["protocol"],
+        protocol:
+            | RunnerHttpMount["protocol"]
+            | RunnerOaicMount["protocol"]
+            | RunnerA2aMount["protocol"],
         endpoint: EndpointPath,
-        handler: RunnerOaicMount["handler"],
+        handler: RunnerHttpMount["handler"],
     ): MountedHttpTransport {
         return {
             endpoint,
