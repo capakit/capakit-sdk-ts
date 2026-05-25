@@ -244,23 +244,63 @@ async function handleFramedHttpRequest(
         response.writeHead(200, {
             "content-type": FRAMED_H1_CONTENT_TYPE,
         });
-        response.end(encodeBodyFrames(await framesFromResponse(appResponse)));
+        await writeResponseFrames(response, appResponse);
     } catch (error) {
-        response.writeHead(200, {
-            "content-type": FRAMED_H1_CONTENT_TYPE,
-        });
-        response.end(encodeBodyFrames([
-            {
-                type: "end",
-                trailers: null,
-                error: {
-                    code: "Internal",
-                    message: error instanceof Error ? error.message : String(error),
-                    options: { retryable: false },
-                },
-            },
-        ]));
+        if (!response.headersSent) {
+            response.writeHead(200, {
+                "content-type": FRAMED_H1_CONTENT_TYPE,
+            });
+        }
+        response.end(encodeBodyFrames([errorEndFrame(error)]));
     }
+}
+
+async function writeResponseFrames(response: ServerResponse, appResponse: Response): Promise<void> {
+    response.write(encodeBodyFrames([
+        {
+            type: "start",
+            headers: {
+                pseudo: { status: appResponse.status },
+                raw: headersToRaw(appResponse.headers),
+            },
+        },
+    ]));
+
+    if (appResponse.body) {
+        const reader = appResponse.body.getReader();
+        try {
+            while (true) {
+                const { done, value } = await reader.read();
+                if (done) {
+                    break;
+                }
+                if (value && value.length > 0) {
+                    response.write(encodeBodyFrames([
+                        {
+                            type: "data",
+                            chunk: Buffer.from(value).toString("base64"),
+                        },
+                    ]));
+                }
+            }
+        } finally {
+            reader.releaseLock();
+        }
+    }
+
+    response.end(encodeBodyFrames([{ type: "end", trailers: null, error: null }]));
+}
+
+function errorEndFrame(error: unknown): Extract<BodyFrame, { type: "end" }> {
+    return {
+        type: "end",
+        trailers: null,
+        error: {
+            code: "Internal",
+            message: error instanceof Error ? error.message : String(error),
+            options: { retryable: false },
+        },
+    };
 }
 
 async function postBodyFrames(
