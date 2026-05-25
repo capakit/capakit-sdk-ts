@@ -47,6 +47,20 @@ describe("HostedMcpBridge", () => {
             error: { code: -32603 },
         });
     });
+
+    test("accepts notification-only requests without a response stream", async () => {
+        const response = await bridgeResponse({
+            accept: "text/event-stream, application/json",
+            contentType: "application/json",
+            body: JSON.stringify({
+                jsonrpc: "2.0",
+                method: "notifications/initialized",
+            }),
+        });
+
+        expect(response.status).toBe(202);
+        expect(await response.text()).toBe("");
+    });
 });
 
 async function bridgeResponse(params: {

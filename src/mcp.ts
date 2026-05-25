@@ -151,6 +151,10 @@ export class HostedMcpBridge {
             }
         }
 
+        if (output.length === 0) {
+            return new Response(null, { status: 202 });
+        }
+
         return new Response(encodeJsonRpcMessages(output, responseFormat), {
             status: 200,
             headers: { "content-type": responseContentType(responseFormat) },
