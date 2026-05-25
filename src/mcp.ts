@@ -123,15 +123,20 @@ export class HostedMcpBridge {
 
     async handleRequest(request: Request): Promise<Response> {
         const responseFormat = negotiateResponseFormat(request);
+        const messages = parseJsonRpcMessages(
+            await request.text(),
+            request.headers.get("content-type"),
+        );
+
+        if (responseFormat === "sse" && messages.some(hasRequestId)) {
+            return this.handleStreamingRequest(messages, responseFormat);
+        }
+
         const output: JSONRPCMessage[] = [];
         const writeMessage = async (message: JSONRPCMessage) => {
             output.push(message);
         };
 
-        const messages = parseJsonRpcMessages(
-            await request.text(),
-            request.headers.get("content-type"),
-        );
         for (const message of messages) {
             try {
                 const response = await this.handleMessage(message, writeMessage);
@@ -159,6 +164,55 @@ export class HostedMcpBridge {
             status: 200,
             headers: { "content-type": responseContentType(responseFormat) },
         });
+    }
+
+    private handleStreamingRequest(
+        messages: JSONRPCMessage[],
+        responseFormat: McpResponseFormat,
+    ): Response {
+        const stream = new ReadableStream<Uint8Array>({
+            start: (controller) => {
+                void this.writeStreamingRequest(messages, responseFormat, controller);
+            },
+        });
+        return new Response(stream, {
+            status: 200,
+            headers: { "content-type": responseContentType(responseFormat) },
+        });
+    }
+
+    private async writeStreamingRequest(
+        messages: JSONRPCMessage[],
+        responseFormat: McpResponseFormat,
+        controller: ReadableStreamDefaultController<Uint8Array>,
+    ): Promise<void> {
+        const writeMessage = async (message: JSONRPCMessage) => {
+            controller.enqueue(encodeUtf8(encodeJsonRpcMessages([message], responseFormat)));
+        };
+
+        try {
+            for (const message of messages) {
+                try {
+                    const response = await this.handleMessage(message, writeMessage);
+                    if (response) {
+                        await writeMessage(response);
+                    }
+                } catch (error) {
+                    if (hasRequestId(message)) {
+                        await writeMessage(
+                            encodeRpcError(
+                                message.id,
+                                -32603,
+                                error instanceof Error ? error.message : "internal error",
+                            ),
+                        );
+                    }
+                }
+            }
+            controller.close();
+        } catch (error) {
+            controller.error(error);
+        }
     }
 
     async handleMessage(
@@ -327,6 +381,10 @@ function encodeJsonRpcMessages(
         return messages.map((message) => `event: message\ndata: ${JSON.stringify(message)}\n\n`).join("");
     }
     return messages.map((message) => JSON.stringify(message)).join("\n") + "\n";
+}
+
+function encodeUtf8(value: string): Uint8Array {
+    return new TextEncoder().encode(value);
 }
 
 function responseContentType(format: McpResponseFormat): string {
