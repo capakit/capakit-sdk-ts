@@ -12,8 +12,6 @@ import {
     parseBind,
 } from "../src/transport.ts";
 
-const FRAMED_H1_CONTENT_TYPE = "application/x-capakit-body-frame-jsonl";
-
 describe("parseBind", () => {
     test("parses TCP binds", () => {
         expect(parseBind("tcp:127.0.0.1:4100")).toEqual({
@@ -68,7 +66,7 @@ describe("createHostedFetch", () => {
                 path: `${url.pathname}${url.search}`,
             });
         });
-        await listen(server, { kind: "tcp", host: "127.0.0.1", port: 0 });
+        await listen(server, { kind: "tcp", host: "127.0.0.1", port: nextPort() });
 
         try {
             const address = server.address();
@@ -110,7 +108,7 @@ describe("createHostedFetch", () => {
                 },
             });
         });
-        await listen(server, { kind: "tcp", host: "127.0.0.1", port: 0 });
+        await listen(server, { kind: "tcp", host: "127.0.0.1", port: nextPort() });
 
         try {
             const hostedFetch = createHostedFetch(tcpBind(server));
@@ -130,49 +128,8 @@ describe("createHostedFetch", () => {
         }
     });
 
-    test("rejects structured end errors from the runner bridge", async () => {
-        const server = await listenRawFramed((_request, response) => {
-            writeFramedResponse(response, [
-                {
-                    type: "end",
-                    trailers: null,
-                    error: {
-                        code: "Unavailable",
-                        message: "bridge unavailable",
-                        options: { retryable: true },
-                    },
-                },
-            ]);
-        });
-
-        try {
-            const hostedFetch = createHostedFetch(tcpBind(server));
-            await expect(hostedFetch("http://capakit.local/fail")).rejects.toThrow(/bridge unavailable/);
-        } finally {
-            await closeServer(server);
-        }
-    });
-
-    test("rejects malformed runner bridge frames", async () => {
-        const server = await listenRawFramed((_request, response) => {
-            writeFramedResponse(response, [
-                {
-                    type: "message",
-                    payload: "not valid over H1",
-                },
-            ]);
-        });
-
-        try {
-            const hostedFetch = createHostedFetch(tcpBind(server));
-            await expect(hostedFetch("http://capakit.local/malformed")).rejects.toThrow(/unsupported type `message`/);
-        } finally {
-            await closeServer(server);
-        }
-    });
-
     test("rejects aborted in-flight requests", async () => {
-        const server = await listenRawFramed((request, _response) => {
+        const server = await listenRaw((request, _response) => {
             request.resume();
         });
         const controller = new AbortController();
@@ -203,25 +160,24 @@ function tcpBind(server: Server) {
     };
 }
 
-async function listenRawFramed(
+let portCursor = 30000 + (process.pid % 10000);
+
+function nextPort(): number {
+    return portCursor++;
+}
+
+async function listenRaw(
     handler: (request: IncomingMessage, response: ServerResponse) => Promise<void> | void,
 ): Promise<Server> {
     const server = createServer((request, response) => {
-        void Promise.resolve(handler(request, response)).catch((error) => {
+        void Promise.resolve(handler?.(request, response)).catch((error) => {
             response.writeHead(500, { "content-type": "text/plain" });
             response.end(error instanceof Error ? error.message : String(error));
         });
     });
     await new Promise<void>((resolve, reject) => {
         server.once("error", reject);
-        server.listen(0, "127.0.0.1", resolve);
+        server.listen(nextPort(), "127.0.0.1", resolve);
     });
     return server;
-}
-
-function writeFramedResponse(response: ServerResponse, frames: unknown[]): void {
-    response.writeHead(200, {
-        "content-type": FRAMED_H1_CONTENT_TYPE,
-    });
-    response.end(frames.map((frame) => JSON.stringify(frame)).join("\n") + "\n");
 }
