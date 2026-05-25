@@ -7,6 +7,8 @@ import { createHostedFetch } from "./transport.ts";
 import type { EndpointPath, HostedBind, McpSessionId } from "./public-types.ts";
 
 const MCP_STREAM_CONTENT_TYPE = "application/x-ndjson";
+const MCP_JSON_CONTENT_TYPE = "application/json; charset=utf-8";
+const MCP_SSE_CONTENT_TYPE = "text/event-stream; charset=utf-8";
 
 type PendingResponse = {
     resolve: (response: JSONRPCMessage) => void;
@@ -120,12 +122,17 @@ export class HostedMcpBridge {
     }
 
     async handleRequest(request: Request): Promise<Response> {
-        let output = "";
+        const responseFormat = negotiateResponseFormat(request);
+        const output: JSONRPCMessage[] = [];
         const writeMessage = async (message: JSONRPCMessage) => {
-            output += `${JSON.stringify(message)}\n`;
+            output.push(message);
         };
 
-        for (const message of parseJsonRpcLines(await request.text())) {
+        const messages = parseJsonRpcMessages(
+            await request.text(),
+            request.headers.get("content-type"),
+        );
+        for (const message of messages) {
             try {
                 const response = await this.handleMessage(message, writeMessage);
                 if (response) {
@@ -144,9 +151,9 @@ export class HostedMcpBridge {
             }
         }
 
-        return new Response(output, {
+        return new Response(encodeJsonRpcMessages(output, responseFormat), {
             status: 200,
-            headers: { "content-type": MCP_STREAM_CONTENT_TYPE },
+            headers: { "content-type": responseContentType(responseFormat) },
         });
     }
 
@@ -277,4 +284,66 @@ function parseJsonRpcLines(raw: string): JSONRPCMessage[] {
         .map((line) => line.trim())
         .filter((line) => line.length > 0)
         .map((line) => JSON.parse(line) as JSONRPCMessage);
+}
+
+type McpResponseFormat = "json" | "ndjson" | "sse";
+
+function parseJsonRpcMessages(raw: string, contentType: string | null): JSONRPCMessage[] {
+    if (isJsonContentType(contentType)) {
+        const parsed = JSON.parse(raw) as JSONRPCMessage | JSONRPCMessage[];
+        return Array.isArray(parsed) ? parsed : [parsed];
+    }
+    return parseJsonRpcLines(raw);
+}
+
+function negotiateResponseFormat(request: Request): McpResponseFormat {
+    const accept = request.headers.get("accept") ?? "";
+    if (accepts(accept, "text/event-stream")) {
+        return "sse";
+    }
+    if (accepts(accept, "application/json")) {
+        return "json";
+    }
+    return "ndjson";
+}
+
+function encodeJsonRpcMessages(
+    messages: JSONRPCMessage[],
+    format: McpResponseFormat,
+): string {
+    if (format === "json") {
+        if (messages.length === 1) {
+            return JSON.stringify(messages[0]);
+        }
+        return JSON.stringify(messages);
+    }
+    if (format === "sse") {
+        return messages.map((message) => `event: message\ndata: ${JSON.stringify(message)}\n\n`).join("");
+    }
+    return messages.map((message) => JSON.stringify(message)).join("\n") + "\n";
+}
+
+function responseContentType(format: McpResponseFormat): string {
+    if (format === "json") {
+        return MCP_JSON_CONTENT_TYPE;
+    }
+    if (format === "sse") {
+        return MCP_SSE_CONTENT_TYPE;
+    }
+    return MCP_STREAM_CONTENT_TYPE;
+}
+
+function isJsonContentType(contentType: string | null): boolean {
+    return mediaType(contentType) === "application/json";
+}
+
+function accepts(accept: string, target: string): boolean {
+    return accept
+        .split(",")
+        .map((entry) => mediaType(entry))
+        .some((entry) => entry === target || entry === "*/*");
+}
+
+function mediaType(value: string | null): string {
+    return (value ?? "").split(";")[0]?.trim().toLowerCase() ?? "";
 }
