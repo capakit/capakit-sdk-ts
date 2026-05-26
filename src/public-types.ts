@@ -85,6 +85,11 @@ export type RunnerWorkloads = {
         endpointPath: EndpointPath,
         options?: ClientOptions,
     ): Promise<A2AClient>;
+    webSocket(
+        workloadMid: WorkloadMid,
+        endpointPath: EndpointPath,
+        options?: ClientOptions,
+    ): Promise<RunnerWebSocket>;
     close(): Promise<void>;
 };
 

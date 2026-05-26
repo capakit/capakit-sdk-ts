@@ -1,8 +1,9 @@
-import { createHash } from "node:crypto";
-import type { IncomingMessage } from "node:http";
+import { createHash, randomBytes } from "node:crypto";
+import { request as requestHttp } from "node:http";
+import type { IncomingMessage, RequestOptions } from "node:http";
 import type { Duplex } from "node:stream";
 
-import type { RunnerWebSocket, RunnerWebSocketMessage } from "./public-types.ts";
+import type { EndpointPath, HostedBind, RunnerWebSocket, RunnerWebSocketMessage } from "./public-types.ts";
 
 const WS_GUID = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
 
@@ -33,6 +34,64 @@ export function acceptWebSocket(
     const ws = new HostedWebSocket(socket);
     ws.start(head);
     return ws;
+}
+
+export async function connectHostedWebSocket(
+    bind: HostedBind,
+    endpoint: EndpointPath,
+    signal?: AbortSignal,
+): Promise<RunnerWebSocket> {
+    if (signal?.aborted) {
+        throw new Error("websocket request aborted");
+    }
+    return await new Promise<RunnerWebSocket>((resolve, reject) => {
+        let settled = false;
+        const key = createWebSocketKey();
+        const req = requestHttp(webSocketRequestOptions(bind, endpoint, key));
+        const abort = () => {
+            if (!settled) {
+                settled = true;
+                reject(new Error("websocket request aborted"));
+            }
+            req.destroy(new Error("websocket request aborted"));
+        };
+        signal?.addEventListener("abort", abort, { once: true });
+        req.on("upgrade", (response, socket, head) => {
+            signal?.removeEventListener("abort", abort);
+            if (settled) {
+                socket.destroy();
+                return;
+            }
+            try {
+                validateWebSocketUpgrade(response, key);
+                const ws = new HostedWebSocket(socket);
+                ws.start(head);
+                settled = true;
+                resolve(ws);
+            } catch (error) {
+                settled = true;
+                socket.destroy();
+                reject(error instanceof Error ? error : new Error(String(error)));
+            }
+        });
+        req.on("response", (response) => {
+            signal?.removeEventListener("abort", abort);
+            if (!settled) {
+                settled = true;
+                reject(new Error(`websocket upgrade failed with status ${response.statusCode ?? "unknown"}`));
+            }
+            response.destroy();
+            req.destroy();
+        });
+        req.on("error", (error) => {
+            signal?.removeEventListener("abort", abort);
+            if (!settled) {
+                settled = true;
+                reject(error);
+            }
+        });
+        req.end();
+    });
 }
 
 class HostedWebSocket implements RunnerWebSocket {
@@ -193,4 +252,57 @@ function decodeFrame(buffer: Buffer): { opcode: number; payload: Buffer; consume
         payload,
         consumed: offset + length,
     };
+}
+
+function createWebSocketKey(): string {
+    return randomBytes(16).toString("base64");
+}
+
+function webSocketRequestOptions(bind: HostedBind, endpoint: EndpointPath, key: string): RequestOptions {
+    const base: RequestOptions = {
+        method: "GET",
+        path: endpoint,
+        headers: {
+            "connection": "Upgrade",
+            "upgrade": "websocket",
+            "sec-websocket-key": key,
+            "sec-websocket-version": "13",
+        },
+    };
+    if (bind.kind === "unix") {
+        return { ...base, socketPath: bind.path, host: "localhost" };
+    }
+    if (bind.kind === "pipe") {
+        return { ...base, socketPath: bind.name, host: "localhost" };
+    }
+    return { ...base, host: bind.host, port: bind.port };
+}
+
+function validateWebSocketUpgrade(response: IncomingMessage, key: string): void {
+    if (response.statusCode !== 101) {
+        throw new Error(`websocket upgrade failed with status ${response.statusCode ?? "unknown"}`);
+    }
+    if (!headerContainsToken(response.headers.connection, "upgrade")) {
+        throw new Error("websocket upgrade response missing connection upgrade token");
+    }
+    if (headerValue(response.headers.upgrade).toLowerCase() !== "websocket") {
+        throw new Error("websocket upgrade response missing websocket upgrade header");
+    }
+    const expectedAccept = createHash("sha1").update(`${key}${WS_GUID}`).digest("base64");
+    if (headerValue(response.headers["sec-websocket-accept"]) !== expectedAccept) {
+        throw new Error("websocket upgrade response had invalid accept key");
+    }
+}
+
+function headerContainsToken(value: string | string[] | undefined, token: string): boolean {
+    return headerValue(value)
+        .split(",")
+        .some((part) => part.trim().toLowerCase() === token.toLowerCase());
+}
+
+function headerValue(value: string | string[] | undefined): string {
+    if (Array.isArray(value)) {
+        return value[0] ?? "";
+    }
+    return value ?? "";
 }

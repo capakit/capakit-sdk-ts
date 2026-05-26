@@ -1,10 +1,11 @@
 import { describe, expect, test } from "vitest";
 
+import { endpointPath } from "../src/public-types.ts";
 import {
     createHostedServer,
     listen,
 } from "../src/transport.ts";
-import { acceptWebSocket } from "../src/websocket.ts";
+import { acceptWebSocket, connectHostedWebSocket } from "../src/websocket.ts";
 
 describe("acceptWebSocket", () => {
     test("echoes text and binary frames", async () => {
@@ -35,6 +36,31 @@ describe("acceptWebSocket", () => {
             client.send(new Uint8Array([1, 2, 3, 4]));
             const binary = await readMessage(client);
             expect(Array.from(new Uint8Array(await binaryBytes(binary)))).toEqual([1, 2, 3, 4]);
+        } finally {
+            server.closeAllConnections();
+            server.close();
+        }
+    });
+
+    test("connects through hosted bind", async () => {
+        const server = createHostedServer(
+            async () => new Response("upgrade required", { status: 426 }),
+            (request, socket, head) => {
+                const ws = acceptWebSocket(request, socket, head);
+                ws.onMessage((message) => ws.send(`from-server: ${message}`));
+            },
+        );
+        const port = nextPort();
+        await listen(server, { kind: "tcp", host: "127.0.0.1", port });
+
+        try {
+            const client = await connectHostedWebSocket(
+                { kind: "tcp", host: "127.0.0.1", port },
+                endpointPath("/ws"),
+            );
+            const received = new Promise<unknown>((resolve) => client.onMessage(resolve));
+            client.send("hello");
+            await expect(received).resolves.toBe("from-server: hello");
         } finally {
             server.closeAllConnections();
             server.close();
