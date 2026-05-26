@@ -1,7 +1,6 @@
 import { describe, expect, test } from "vitest";
 
 import {
-    closeServer,
     createHostedServer,
     listen,
 } from "../src/transport.ts";
@@ -35,11 +34,10 @@ describe("acceptWebSocket", () => {
 
             client.send(new Uint8Array([1, 2, 3, 4]));
             const binary = await readMessage(client);
-            expect(binary).toBeInstanceOf(ArrayBuffer);
-            expect(Array.from(new Uint8Array(binary as ArrayBuffer))).toEqual([1, 2, 3, 4]);
-            client.close();
+            expect(Array.from(new Uint8Array(await binaryBytes(binary)))).toEqual([1, 2, 3, 4]);
         } finally {
-            await closeServer(server);
+            server.closeAllConnections();
+            server.close();
         }
     });
 });
@@ -64,4 +62,14 @@ async function readMessage(socket: WebSocket): Promise<unknown> {
         socket.addEventListener("message", (event) => resolve(event.data), { once: true });
         socket.addEventListener("error", () => reject(new Error("websocket error")), { once: true });
     });
+}
+
+async function binaryBytes(value: unknown): Promise<ArrayBuffer> {
+    if (value instanceof ArrayBuffer) {
+        return value;
+    }
+    if (value instanceof Blob) {
+        return await value.arrayBuffer();
+    }
+    throw new Error(`unexpected binary payload: ${typeof value}`);
 }

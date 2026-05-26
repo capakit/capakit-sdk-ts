@@ -36,12 +36,15 @@ export function acceptWebSocket(
 }
 
 class HostedWebSocket implements RunnerWebSocket {
+    private readonly socket: Duplex;
     private buffer = Buffer.alloc(0);
     private messageHandlers: MessageHandler[] = [];
     private closeHandlers: CloseHandler[] = [];
     private closed = false;
 
-    constructor(private readonly socket: Duplex) {}
+    constructor(socket: Duplex) {
+        this.socket = socket;
+    }
 
     start(head: Buffer): void {
         this.socket.on("data", (chunk) => this.handleData(Buffer.from(chunk)));
