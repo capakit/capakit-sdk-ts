@@ -9,6 +9,7 @@ import type {
 } from "node:http";
 import { unlink } from "node:fs/promises";
 import { Readable } from "node:stream";
+import type { Duplex } from "node:stream";
 
 import type { HostedBind, HostedBindValue } from "./public-types.ts";
 
@@ -41,10 +42,19 @@ export function parseBind(value: HostedBindValue): HostedBind {
 
 export function createHostedServer(
     handler: (request: Request) => Promise<Response>,
+    upgradeHandler?: (request: IncomingMessage, socket: Duplex, head: Buffer) => void,
 ): HttpServer {
-    return createServer((request, response) => {
+    const server = createServer((request, response) => {
         void handleRawHttpRequest(request, response, handler);
     });
+    server.on("upgrade", (request, socket, head) => {
+        if (!upgradeHandler) {
+            socket.destroy();
+            return;
+        }
+        upgradeHandler(request, socket, head);
+    });
+    return server;
 }
 
 export async function listen(server: HttpServer, bind: HostedBind): Promise<void> {

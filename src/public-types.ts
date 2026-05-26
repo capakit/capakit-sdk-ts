@@ -126,10 +126,30 @@ export type RunnerHttpHandler = (
     context: RunnerHttpHandlerContext,
 ) => Response | Promise<Response>;
 
+export type RunnerWebSocketMessage = string | Uint8Array;
+
+export type RunnerWebSocket = {
+    send(message: RunnerWebSocketMessage): void;
+    close(code?: number, reason?: string): void;
+    onMessage(handler: (message: RunnerWebSocketMessage) => void | Promise<void>): void;
+    onClose(handler: () => void | Promise<void>): void;
+};
+
+export type RunnerWebSocketHandler = (
+    socket: RunnerWebSocket,
+    context: RunnerHttpHandlerContext,
+) => void | Promise<void>;
+
 export type RunnerOaicMount = {
     protocol: "oaic";
     endpoint: EndpointPath;
     handler: RunnerHttpHandler;
+};
+
+export type RunnerWebSocketMount = {
+    protocol: "http";
+    endpoint: EndpointPath;
+    websocket: RunnerWebSocketHandler;
 };
 
 export type RunnerHttpMount = {
@@ -149,6 +169,7 @@ export type RunnerA2aMount = {
 export type RunnerSdkMount =
     | RunnerMcpMount
     | RunnerHttpMount
+    | RunnerWebSocketMount
     | RunnerOaicMount
     | RunnerA2aMount;
 
