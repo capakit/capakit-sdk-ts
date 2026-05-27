@@ -36,6 +36,7 @@ import {
     removeSocket,
 } from "./transport.ts";
 import { RunnerWorkloadsImpl } from "./workloads.ts";
+import { optionalModule } from "./optional-imports.ts";
 
 export * from "./public-types.ts";
 
@@ -348,7 +349,7 @@ class HostedRunnerSdk implements RunnerSdk {
             "a2a",
             mount.endpoint,
             async (request, context) => {
-                handlerPromise ??= import("./a2a.ts").then(({ createA2aHandler }) =>
+                handlerPromise ??= import(optionalModule("./a2a.ts")).then(({ createA2aHandler }) =>
                     createA2aHandler({
                         agentCard: mount.agentCard as never,
                         executor: mount.executor as never,

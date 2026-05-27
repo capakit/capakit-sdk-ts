@@ -6,9 +6,10 @@ import { dirname, join } from "node:path";
 import type WebSocket from "ws";
 
 import type { EndpointPath, HostedBind } from "./public-types.ts";
+import { optionalPackageJson } from "./optional-imports.ts";
 
 const require = createRequire(import.meta.url);
-const wsRoot = dirname(require.resolve("ws/package.json"));
+const wsRoot = dirname(require.resolve(optionalPackageJson("ws")));
 const wsModule = require(join(wsRoot, "index.js")) as typeof import("ws");
 const WebSocketCtor = wsModule.WebSocket ?? wsModule;
 const WEB_SOCKET_GUID = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";

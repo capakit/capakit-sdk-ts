@@ -17,6 +17,7 @@ import type { HostedWorkloadConnectionConfig, RunnerEnv } from "./runner-env.ts"
 import { parseBind } from "./transport.ts";
 import { HostedMcpClientTransport } from "./mcp.ts";
 import { createExternalLlmFetch, localEndpointBaseUrl } from "./oaic.ts";
+import { optionalModule } from "./optional-imports.ts";
 
 export class RunnerWorkloadsImpl implements RunnerWorkloads {
     readonly workloads: ReadonlyArray<RunnerWorkloadConnection>;
@@ -68,7 +69,7 @@ export class RunnerWorkloadsImpl implements RunnerWorkloads {
 
         const connection = this.connections.get(connectionKey(workloadMidValue, endpointPathValue))!;
         const endpoint = endpointPath(endpointPathValue);
-        const { default: OpenAI } = await import("openai");
+        const { default: OpenAI } = await import(optionalModule("openai"));
         return new OpenAI({
             apiKey: "capakit-local",
             baseURL: localEndpointBaseUrl(endpoint, "/v1"),
@@ -87,7 +88,7 @@ export class RunnerWorkloadsImpl implements RunnerWorkloads {
 
         const connection = this.connections.get(connectionKey(workloadMidValue, endpointPathValue))!;
         const endpoint = endpointPath(endpointPathValue);
-        const { default: Anthropic } = await import("@anthropic-ai/sdk");
+        const { default: Anthropic } = await import(optionalModule("@anthropic-ai/sdk"));
         return new Anthropic({
             apiKey: "capakit-local",
             baseURL: localEndpointBaseUrl(endpoint),
@@ -108,7 +109,7 @@ export class RunnerWorkloadsImpl implements RunnerWorkloads {
         const endpoint = endpointPath(endpointPathValue);
         const hostedFetch = createExternalLlmFetch(parseBind(connection.bind), endpoint);
         const defaultFetch = globalThis.fetch.bind(globalThis);
-        const { GoogleGenAI } = await import("@google/genai");
+        const { GoogleGenAI } = await import(optionalModule("@google/genai"));
         globalThis.fetch = (input, init) => {
             const request = new Request(input, init);
             const url = new URL(request.url);
@@ -136,7 +137,7 @@ export class RunnerWorkloadsImpl implements RunnerWorkloads {
         }
 
         const connection = this.connections.get(connectionKey(workloadMidValue, endpointPathValue))!;
-        const { createA2aClient } = await import("./a2a.ts");
+        const { createA2aClient } = await import(optionalModule("./a2a.ts"));
         return await createA2aClient(
             parseBind(connection.bind),
             endpointPath(endpointPathValue),
@@ -153,7 +154,7 @@ export class RunnerWorkloadsImpl implements RunnerWorkloads {
         }
 
         const connection = this.connections.get(connectionKey(workloadMidValue, endpointPathValue))!;
-        const { connectHostedWebSocket } = await import("./websocket.ts");
+        const { connectHostedWebSocket } = await import(optionalModule("./websocket.ts"));
         return await connectHostedWebSocket(
             parseBind(connection.bind),
             endpointPath(endpointPathValue),
