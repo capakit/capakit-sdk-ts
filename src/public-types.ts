@@ -6,6 +6,7 @@ import type { AgentExecutor, TaskStore } from "@a2a-js/sdk/server";
 import type Anthropic from "@anthropic-ai/sdk";
 import type { GoogleGenAI } from "@google/genai";
 import OpenAI from "openai";
+import type WebSocket from "ws";
 
 declare const CAPAKIT_BRAND: unique symbol;
 
@@ -89,7 +90,7 @@ export type RunnerWorkloads = {
         workloadMid: WorkloadMid,
         endpointPath: EndpointPath,
         options?: ClientOptions,
-    ): Promise<RunnerWebSocket>;
+    ): Promise<WebSocket>;
     close(): Promise<void>;
 };
 
@@ -131,17 +132,8 @@ export type RunnerHttpHandler = (
     context: RunnerHttpHandlerContext,
 ) => Response | Promise<Response>;
 
-export type RunnerWebSocketMessage = string | Uint8Array;
-
-export type RunnerWebSocket = {
-    send(message: RunnerWebSocketMessage): void;
-    close(code?: number, reason?: string): void;
-    onMessage(handler: (message: RunnerWebSocketMessage) => void | Promise<void>): void;
-    onClose(handler: () => void | Promise<void>): void;
-};
-
 export type RunnerWebSocketHandler = (
-    socket: RunnerWebSocket,
+    socket: WebSocket,
     context: RunnerHttpHandlerContext,
 ) => void | Promise<void>;
 

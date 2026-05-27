@@ -1,4 +1,5 @@
 import { describe, expect, test } from "vitest";
+import WebSocket, { type RawData } from "ws";
 
 import { endpointPath } from "../src/public-types.ts";
 import {
@@ -13,9 +14,9 @@ describe("acceptWebSocket", () => {
             async () => new Response("upgrade required", { status: 426 }),
             (request, socket, head) => {
                 const ws = acceptWebSocket(request, socket, head);
-                ws.onMessage((message) => {
-                    if (typeof message === "string") {
-                        ws.send(`echo: ${message}`);
+                ws.on("message", (message, isBinary) => {
+                    if (!isBinary) {
+                        ws.send(`echo: ${message.toString()}`);
                         return;
                     }
                     ws.send(message);
@@ -47,7 +48,7 @@ describe("acceptWebSocket", () => {
             async () => new Response("upgrade required", { status: 426 }),
             (request, socket, head) => {
                 const ws = acceptWebSocket(request, socket, head);
-                ws.onMessage((message) => ws.send(`from-server: ${message}`));
+                ws.on("message", (message) => ws.send(`from-server: ${message.toString()}`));
             },
         );
         const port = nextPort();
@@ -58,7 +59,7 @@ describe("acceptWebSocket", () => {
                 { kind: "tcp", host: "127.0.0.1", port },
                 endpointPath("/ws"),
             );
-            const received = new Promise<unknown>((resolve) => client.onMessage(resolve));
+            const received = readMessage(client);
             client.send("hello");
             await expect(received).resolves.toBe("from-server: hello");
         } finally {
@@ -67,30 +68,6 @@ describe("acceptWebSocket", () => {
         }
     });
 
-    test("delivers messages received before handler registration", async () => {
-        const server = createHostedServer(
-            async () => new Response("upgrade required", { status: 426 }),
-            (request, socket, head) => {
-                const ws = acceptWebSocket(request, socket, head);
-                ws.send("ready");
-            },
-        );
-        const port = nextPort();
-        await listen(server, { kind: "tcp", host: "127.0.0.1", port });
-
-        try {
-            const client = await connectHostedWebSocket(
-                { kind: "tcp", host: "127.0.0.1", port },
-                endpointPath("/ws"),
-            );
-            await new Promise((resolve) => setTimeout(resolve, 10));
-            const received = new Promise<unknown>((resolve) => client.onMessage(resolve));
-            await expect(received).resolves.toBe("ready");
-        } finally {
-            server.closeAllConnections();
-            server.close();
-        }
-    });
 });
 
 let portCursor = 42000 + (process.pid % 10000);
@@ -102,25 +79,31 @@ function nextPort(): number {
 async function connectWebSocket(port: number): Promise<WebSocket> {
     const socket = new WebSocket(`ws://127.0.0.1:${port}/ws`);
     await new Promise<void>((resolve, reject) => {
-        socket.addEventListener("open", () => resolve(), { once: true });
-        socket.addEventListener("error", () => reject(new Error("websocket error")), { once: true });
+        socket.once("open", () => resolve());
+        socket.once("error", () => reject(new Error("websocket error")));
     });
     return socket;
 }
 
-async function readMessage(socket: WebSocket): Promise<unknown> {
+async function readMessage(socket: WebSocket): Promise<string | RawData> {
     return await new Promise((resolve, reject) => {
-        socket.addEventListener("message", (event) => resolve(event.data), { once: true });
-        socket.addEventListener("error", () => reject(new Error("websocket error")), { once: true });
+        socket.once("message", (data, isBinary) => resolve(isBinary ? data : data.toString()));
+        socket.once("error", () => reject(new Error("websocket error")));
     });
 }
 
-async function binaryBytes(value: unknown): Promise<ArrayBuffer> {
+async function binaryBytes(value: unknown): Promise<Uint8Array> {
+    if (Buffer.isBuffer(value)) {
+        return new Uint8Array(value);
+    }
     if (value instanceof ArrayBuffer) {
+        return new Uint8Array(value);
+    }
+    if (value instanceof Uint8Array) {
         return value;
     }
     if (value instanceof Blob) {
-        return await value.arrayBuffer();
+        return new Uint8Array(await value.arrayBuffer());
     }
     throw new Error(`unexpected binary payload: ${typeof value}`);
 }

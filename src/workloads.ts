@@ -3,6 +3,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { GoogleGenAI } from "@google/genai";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import OpenAI from "openai";
+import type WebSocket from "ws";
 
 import { createA2aClient } from "./a2a.ts";
 import { endpointPath } from "./public-types.ts";
@@ -11,7 +12,6 @@ import type {
     EndpointPath,
     RunnerWorkloadConnection,
     RunnerWorkloads,
-    RunnerWebSocket,
     WorkloadMid,
 } from "./public-types.ts";
 import type { HostedWorkloadConnectionConfig, RunnerEnv } from "./runner-env.ts";
@@ -145,7 +145,7 @@ export class RunnerWorkloadsImpl implements RunnerWorkloads {
         workloadMidValue: WorkloadMid,
         endpointPathValue: EndpointPath,
         options: ClientOptions = {},
-    ): Promise<RunnerWebSocket> {
+    ): Promise<WebSocket> {
         if (options.signal?.aborted) {
             throw new Error(`WebSocket request aborted for workload \`${workloadMidValue}\``);
         }
