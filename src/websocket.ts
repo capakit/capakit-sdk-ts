@@ -1,9 +1,7 @@
 import { createHash, randomBytes } from "node:crypto";
-import type { IncomingMessage } from "node:http";
 import { createRequire } from "node:module";
 import { createConnection, type Socket } from "node:net";
 import { dirname, join } from "node:path";
-import type { Duplex } from "node:stream";
 
 import type WebSocket from "ws";
 
@@ -27,29 +25,8 @@ const RAW_WEB_SOCKET_OPTIONS = {
 type RawWebSocket = WebSocket & {
     _isServer: boolean;
     _url: string;
-    setSocket(socket: Duplex, head: Buffer, options: typeof RAW_WEB_SOCKET_OPTIONS): void;
+    setSocket(socket: Socket, head: Buffer, options: typeof RAW_WEB_SOCKET_OPTIONS): void;
 };
-
-export function acceptWebSocket(
-    request: IncomingMessage,
-    socket: Duplex,
-    head: Buffer,
-): WebSocket {
-    const key = request.headers["sec-websocket-key"];
-    if (typeof key !== "string" || key.length === 0) {
-        socket.destroy();
-        throw new Error("websocket request missing sec-websocket-key");
-    }
-    if (request.headers.upgrade?.toLowerCase() !== "websocket") {
-        socket.destroy();
-        throw new Error("websocket request missing upgrade header");
-    }
-
-    socket.write(rawUpgradeResponse(key));
-    const webSocket = newRawWebSocket(true);
-    webSocket.setSocket(socket, head, RAW_WEB_SOCKET_OPTIONS);
-    return webSocket;
-}
 
 export async function connectHostedWebSocket(
     bind: HostedBind,
@@ -107,7 +84,7 @@ async function connectRawHostedWebSocket(
         const socket = connectRawSocket(bind);
         const key = randomBytes(16).toString("base64");
         const url = webSocketUrl(bind, endpoint);
-        const webSocket = newRawWebSocket(false, url);
+        const webSocket = newRawWebSocket(url);
 
         const settle = (result: { webSocket: WebSocket } | { error: Error }): void => {
             if (settled) {
@@ -180,13 +157,13 @@ function connectRawSocket(bind: HostedBind): Socket {
     throw new Error(`raw websocket socket unsupported for bind kind ${bind.kind}`);
 }
 
-function newRawWebSocket(isServer: boolean, url = ""): RawWebSocket {
+function newRawWebSocket(url: string): RawWebSocket {
     const webSocket = new WebSocketCtor(
         null as never,
         undefined,
         RAW_WEB_SOCKET_OPTIONS,
     ) as RawWebSocket;
-    webSocket._isServer = isServer;
+    webSocket._isServer = false;
     webSocket._url = url;
     return webSocket;
 }
@@ -227,18 +204,6 @@ function assertUpgradeAccepted(responseHead: string, key: string): void {
     if (headers.get("sec-websocket-accept") !== accept) {
         throw new Error("invalid websocket accept header");
     }
-}
-
-function rawUpgradeResponse(key: string): string {
-    const accept = createHash("sha1").update(key + WEB_SOCKET_GUID).digest("base64");
-    return [
-        "HTTP/1.1 101 Switching Protocols",
-        "Upgrade: websocket",
-        "Connection: Upgrade",
-        `Sec-WebSocket-Accept: ${accept}`,
-        "",
-        "",
-    ].join("\r\n");
 }
 
 function normalizeError(error: unknown): Error {

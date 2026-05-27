@@ -1,58 +1,17 @@
-import { describe, expect, test } from "vitest";
-import WebSocket, { type RawData } from "ws";
+import { createServer } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
+import { describe, expect, test } from "vitest";
+import WebSocket, { type RawData, WebSocketServer } from "ws";
+
 import { endpointPath } from "../src/public-types.ts";
-import {
-    createHostedServer,
-    listen,
-} from "../src/transport.ts";
-import { acceptWebSocket, connectHostedWebSocket } from "../src/websocket.ts";
+import { listen } from "../src/transport.ts";
+import { connectHostedWebSocket } from "../src/websocket.ts";
 
-describe("acceptWebSocket", () => {
-    test("echoes text and binary frames", async () => {
-        const server = createHostedServer(
-            async () => new Response("upgrade required", { status: 426 }),
-            (request, socket, head) => {
-                const ws = acceptWebSocket(request, socket, head);
-                ws.on("message", (message, isBinary) => {
-                    if (!isBinary) {
-                        ws.send(`echo: ${message.toString()}`);
-                        return;
-                    }
-                    ws.send(message);
-                });
-            },
-        );
-        await listen(server, { kind: "tcp", host: "127.0.0.1", port: nextPort() });
-
-        try {
-            const address = server.address();
-            if (address === null || typeof address === "string") {
-                throw new Error("expected TCP address");
-            }
-            const client = await connectWebSocket(address.port);
-            client.send("ping");
-            await expect(readMessage(client)).resolves.toBe("echo: ping");
-
-            client.send(new Uint8Array([1, 2, 3, 4]));
-            const binary = await readMessage(client);
-            expect(Array.from(new Uint8Array(await binaryBytes(binary)))).toEqual([1, 2, 3, 4]);
-        } finally {
-            server.closeAllConnections();
-            server.close();
-        }
-    });
-
+describe("connectHostedWebSocket", () => {
     test("connects through hosted bind", async () => {
-        const server = createHostedServer(
-            async () => new Response("upgrade required", { status: 426 }),
-            (request, socket, head) => {
-                const ws = acceptWebSocket(request, socket, head);
-                ws.on("message", (message) => ws.send(`from-server: ${message.toString()}`));
-            },
-        );
+        const server = createEchoServer("from-server");
         const port = nextPort();
         await listen(server, { kind: "tcp", host: "127.0.0.1", port });
 
@@ -71,13 +30,7 @@ describe("acceptWebSocket", () => {
     });
 
     test("connects through hosted unix socket bind", async () => {
-        const server = createHostedServer(
-            async () => new Response("upgrade required", { status: 426 }),
-            (request, socket, head) => {
-                const ws = acceptWebSocket(request, socket, head);
-                ws.on("message", (message) => ws.send(`from-uds: ${message.toString()}`));
-            },
-        );
+        const server = createEchoServer("from-uds");
         const path = join(tmpdir(), `capakit-sdk-ws-${process.pid}-${Date.now()}.sock`);
         await listen(server, { kind: "unix", path });
 
@@ -99,13 +52,20 @@ function nextPort(): number {
     return portCursor++;
 }
 
-async function connectWebSocket(port: number): Promise<WebSocket> {
-    const socket = new WebSocket(`ws://127.0.0.1:${port}/ws`);
-    await new Promise<void>((resolve, reject) => {
-        socket.once("open", () => resolve());
-        socket.once("error", () => reject(new Error("websocket error")));
+function createEchoServer(prefix: string) {
+    const server = createServer();
+    const webSocketServer = new WebSocketServer({ server });
+    webSocketServer.on("connection", (socket) => {
+        socket.on("message", (message, isBinary) => {
+            if (!isBinary) {
+                socket.send(`${prefix}: ${message.toString()}`);
+                return;
+            }
+            socket.send(message);
+        });
     });
-    return socket;
+    server.once("close", () => webSocketServer.close());
+    return server;
 }
 
 async function readMessage(socket: WebSocket): Promise<string | RawData> {
@@ -113,20 +73,4 @@ async function readMessage(socket: WebSocket): Promise<string | RawData> {
         socket.once("message", (data, isBinary) => resolve(isBinary ? data : data.toString()));
         socket.once("error", () => reject(new Error("websocket error")));
     });
-}
-
-async function binaryBytes(value: unknown): Promise<Uint8Array> {
-    if (Buffer.isBuffer(value)) {
-        return new Uint8Array(value);
-    }
-    if (value instanceof ArrayBuffer) {
-        return new Uint8Array(value);
-    }
-    if (value instanceof Uint8Array) {
-        return value;
-    }
-    if (value instanceof Blob) {
-        return new Uint8Array(await value.arrayBuffer());
-    }
-    throw new Error(`unexpected binary payload: ${typeof value}`);
 }

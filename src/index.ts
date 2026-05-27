@@ -1,7 +1,6 @@
 import { existsSync } from "node:fs";
 import { execFileSync } from "node:child_process";
-import type { IncomingMessage, Server as HttpServer } from "node:http";
-import type { Duplex } from "node:stream";
+import type { Server as HttpServer } from "node:http";
 
 import {
     HostedMcpBridge,
@@ -18,7 +17,6 @@ import type {
     RunnerPresenceLifecycleHook,
     RunnerHttpMount,
     RunnerOaicMount,
-    RunnerWebSocketMount,
     RunnerSdk,
     RunnerSdkMount,
     RunnerSdkOptions,
@@ -39,7 +37,6 @@ import {
     removeSocket,
 } from "./transport.ts";
 import { RunnerWorkloadsImpl } from "./workloads.ts";
-import { acceptWebSocket } from "./websocket.ts";
 
 export * from "./public-types.ts";
 export { createA2aHandler } from "./a2a.ts";
@@ -49,7 +46,6 @@ type MountedHttpTransport = {
     start?: () => Promise<void>;
     stop?: () => Promise<void>;
     handleRequest: (request: Request) => Promise<Response>;
-    handleUpgrade?: (request: IncomingMessage, socket: Duplex, head: Buffer) => void;
 };
 
 class HostedRunnerSdk implements RunnerSdk {
@@ -90,10 +86,6 @@ class HostedRunnerSdk implements RunnerSdk {
                 this.mountHttpTransport(this.mcpServerTransport(mount));
                 return;
             case "http":
-                if ("websocket" in mount) {
-                    this.mountHttpTransport(this.runnerWebSocketTransport(mount));
-                    return;
-                }
                 this.mountHttpTransport(
                     this.runnerHttpHandlerTransport(
                         "http",
@@ -137,7 +129,6 @@ class HostedRunnerSdk implements RunnerSdk {
         await this.onPresenceStart?.(this.lifecycleContext());
         const server = createHostedServer(
             (request) => this.handleRequest(request),
-            (request, socket, head) => this.handleUpgrade(request, socket, head),
         );
         await listen(server, this.bind);
         this.server = server;
@@ -335,20 +326,6 @@ class HostedRunnerSdk implements RunnerSdk {
         }
     }
 
-    private handleUpgrade(request: IncomingMessage, socket: Duplex, head: Buffer): void {
-        try {
-            const path = request.url ? new URL(request.url, "http://capakit.local").pathname : "/";
-            const transport = this.resolveMountedTransport(path);
-            if (!transport?.handleUpgrade) {
-                socket.destroy();
-                return;
-            }
-            transport.handleUpgrade(request, socket, head);
-        } catch {
-            socket.destroy();
-        }
-    }
-
     private mountHttpTransport(transport: MountedHttpTransport): void {
         if (this.mountedTransports.has(transport.endpoint)) {
             throw new Error(`runner SDK endpoint \`${transport.endpoint}\` is already mounted`);
@@ -377,23 +354,6 @@ class HostedRunnerSdk implements RunnerSdk {
                 taskStore: mount.taskStore,
             }),
         );
-    }
-
-    private runnerWebSocketTransport(mount: RunnerWebSocketMount): MountedHttpTransport {
-        return {
-            endpoint: mount.endpoint,
-            handleRequest: async () => new Response("websocket endpoint", { status: 426 }),
-            handleUpgrade: (request, socket, head) => {
-                const ws = acceptWebSocket(request, socket, head);
-                void Promise.resolve(
-                    mount.websocket(ws, {
-                        ...this.lifecycleContext(),
-                        protocol: "http",
-                        endpoint: mount.endpoint,
-                    }),
-                ).catch(() => ws.close(1011, "handler error"));
-            },
-        };
     }
 
     private runnerHttpHandlerTransport(
