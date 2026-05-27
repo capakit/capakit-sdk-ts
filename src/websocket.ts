@@ -1,5 +1,5 @@
 import type { IncomingMessage } from "node:http";
-import { createConnection } from "node:net";
+import { createConnection, type Socket } from "node:net";
 import type { Duplex } from "node:stream";
 
 import WebSocket, { WebSocketServer } from "ws";
@@ -35,9 +35,7 @@ export async function connectHostedWebSocket(
 
     return await new Promise<WebSocket>((resolve, reject) => {
         let settled = false;
-        const webSocket = new WebSocket(`ws://localhost${endpoint}`, {
-            createConnection: () => connectRawSocket(bind),
-        });
+        const webSocket = new WebSocket(webSocketUrl(bind, endpoint), webSocketOptions(bind));
 
         const settle = (result: { webSocket: WebSocket } | { error: Error }): void => {
             if (settled) {
@@ -59,17 +57,56 @@ export async function connectHostedWebSocket(
         signal?.addEventListener("abort", abort, { once: true });
         webSocket.once("open", () => settle({ webSocket }));
         webSocket.once("error", (error) => {
-            settle({ error: error instanceof Error ? error : new Error(String(error)) });
+            settle({ error: normalizeError(error) });
         });
     });
 }
 
-function connectRawSocket(bind: HostedBind): Duplex {
+function webSocketUrl(bind: HostedBind, endpoint: EndpointPath): string {
     if (bind.kind === "unix") {
-        return createConnection({ path: bind.path });
+        return `ws+unix://${bind.path}:${endpoint}`;
     }
+    if (bind.kind === "tcp") {
+        return `ws://${bind.host}:${bind.port}${endpoint}`;
+    }
+    return `ws://localhost${endpoint}`;
+}
+
+function webSocketOptions(bind: HostedBind): WebSocket.ClientOptions | undefined {
+    if (bind.kind !== "pipe") {
+        return undefined;
+    }
+    return {
+        createConnection: () => connectRawSocket(bind),
+    };
+}
+
+function connectRawSocket(bind: HostedBind): Socket {
     if (bind.kind === "pipe") {
         return createConnection({ path: bind.name });
     }
-    return createConnection({ host: bind.host, port: bind.port });
+    throw new Error(`raw websocket socket unsupported for bind kind ${bind.kind}`);
+}
+
+function normalizeError(error: unknown): Error {
+    if (error instanceof Error) {
+        return error;
+    }
+    if (
+        typeof error === "object"
+        && error !== null
+        && "error" in error
+        && error.error instanceof Error
+    ) {
+        return error.error;
+    }
+    if (
+        typeof error === "object"
+        && error !== null
+        && "message" in error
+        && typeof error.message === "string"
+    ) {
+        return new Error(error.message);
+    }
+    return new Error(String(error));
 }

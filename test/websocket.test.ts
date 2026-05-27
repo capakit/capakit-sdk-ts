@@ -1,5 +1,7 @@
 import { describe, expect, test } from "vitest";
 import WebSocket, { type RawData } from "ws";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 
 import { endpointPath } from "../src/public-types.ts";
 import {
@@ -68,6 +70,27 @@ describe("acceptWebSocket", () => {
         }
     });
 
+    test("connects through hosted unix socket bind", async () => {
+        const server = createHostedServer(
+            async () => new Response("upgrade required", { status: 426 }),
+            (request, socket, head) => {
+                const ws = acceptWebSocket(request, socket, head);
+                ws.on("message", (message) => ws.send(`from-uds: ${message.toString()}`));
+            },
+        );
+        const path = join(tmpdir(), `capakit-sdk-ws-${process.pid}-${Date.now()}.sock`);
+        await listen(server, { kind: "unix", path });
+
+        try {
+            const client = await connectHostedWebSocket({ kind: "unix", path }, endpointPath("/ws"));
+            const received = readMessage(client);
+            client.send("hello");
+            await expect(received).resolves.toBe("from-uds: hello");
+        } finally {
+            server.closeAllConnections();
+            server.close();
+        }
+    });
 });
 
 let portCursor = 42000 + (process.pid % 10000);
