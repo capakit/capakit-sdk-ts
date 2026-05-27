@@ -19,6 +19,14 @@
             "types": "./src/index.ts",
             "default": "./src/index.ts"
         },
+        "./a2a": {
+            "types": "./src/a2a.ts",
+            "default": "./src/a2a.ts"
+        },
+        "./mcp": {
+            "types": "./src/mcp.ts",
+            "default": "./src/mcp.ts"
+        },
         "./public-types": {
             "types": "./src/public-types.ts",
             "default": "./src/public-types.ts"
@@ -33,17 +41,41 @@
         "release": "scripts/release.sh"
     },
     "dependencies": {
+        "@modelcontextprotocol/sdk": "1.29.0"
+    },
+    "peerDependencies": {
         "@a2a-js/sdk": "^0.3.4",
         "@anthropic-ai/sdk": "^0.93.0",
         "@google/genai": "^1.51.0",
-        "@modelcontextprotocol/sdk": "1.29.0",
-        "@types/ws": "^8.18.1",
         "openai": "^6.3.0",
         "ws": "^8.21.0"
     },
+    "peerDependenciesMeta": {
+        "@a2a-js/sdk": {
+            "optional": true
+        },
+        "@anthropic-ai/sdk": {
+            "optional": true
+        },
+        "@google/genai": {
+            "optional": true
+        },
+        "openai": {
+            "optional": true
+        },
+        "ws": {
+            "optional": true
+        }
+    },
     "devDependencies": {
+        "@a2a-js/sdk": "^0.3.4",
+        "@anthropic-ai/sdk": "^0.93.0",
+        "@google/genai": "^1.51.0",
         "@types/node": "22.12.0",
+        "@types/ws": "^8.18.1",
+        "openai": "^6.3.0",
         "typescript": "5.5.4",
-        "vitest": "^3.2.4"
+        "vitest": "^3.2.4",
+        "ws": "^8.21.0"
     }
 }

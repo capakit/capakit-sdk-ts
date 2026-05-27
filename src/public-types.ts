@@ -1,12 +1,5 @@
 import type { Client as McpClient } from "@modelcontextprotocol/sdk/client/index.js";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import type { AgentCard } from "@a2a-js/sdk";
-import type { A2AClient } from "@a2a-js/sdk/client";
-import type { AgentExecutor, TaskStore } from "@a2a-js/sdk/server";
-import type Anthropic from "@anthropic-ai/sdk";
-import type { GoogleGenAI } from "@google/genai";
-import OpenAI from "openai";
-import type WebSocket from "ws";
 
 declare const CAPAKIT_BRAND: unique symbol;
 
@@ -23,6 +16,14 @@ export type SecretMid = Brand<string, "SecretMid">;
 export type HostMountMid = Brand<string, "HostMountMid">;
 export type RunnerProtocol = "http" | "mcp" | "oaic" | "a2a";
 export type HostMountAccess = "read_only" | "read_write";
+export type A2aAgentCard = unknown;
+export type A2aAgentExecutor = unknown;
+export type A2aTaskStore = unknown;
+export type A2aClient = unknown;
+export type AnthropicClient = unknown;
+export type GoogleAiStudioClient = unknown;
+export type OaicClient = unknown;
+export type WebSocketClient = unknown;
 
 export type HostedBind =
     | { kind: "unix"; path: string }
@@ -70,27 +71,27 @@ export type RunnerWorkloads = {
         workloadMid: WorkloadMid,
         endpointPath: EndpointPath,
         options?: ClientOptions,
-    ): Promise<OpenAI>;
+    ): Promise<OaicClient>;
     anthropicClient(
         workloadMid: WorkloadMid,
         endpointPath: EndpointPath,
         options?: ClientOptions,
-    ): Promise<Anthropic>;
+    ): Promise<AnthropicClient>;
     googleAiStudioClient(
         workloadMid: WorkloadMid,
         endpointPath: EndpointPath,
         options?: ClientOptions,
-    ): Promise<GoogleGenAI>;
+    ): Promise<GoogleAiStudioClient>;
     a2aClient(
         workloadMid: WorkloadMid,
         endpointPath: EndpointPath,
         options?: ClientOptions,
-    ): Promise<A2AClient>;
+    ): Promise<A2aClient>;
     webSocket(
         workloadMid: WorkloadMid,
         endpointPath: EndpointPath,
         options?: ClientOptions,
-    ): Promise<WebSocket>;
+    ): Promise<WebSocketClient>;
     close(): Promise<void>;
 };
 
@@ -147,9 +148,9 @@ export type RunnerHttpMount = {
 export type RunnerA2aMount = {
     protocol: "a2a";
     endpoint: EndpointPath;
-    agentCard: AgentCard;
-    executor: AgentExecutor;
-    taskStore?: TaskStore;
+    agentCard: A2aAgentCard;
+    executor: A2aAgentExecutor;
+    taskStore?: A2aTaskStore;
 };
 
 export type RunnerSdkMount =

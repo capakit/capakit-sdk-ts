@@ -1,24 +1,22 @@
-import { A2AClient } from "@a2a-js/sdk/client";
-import Anthropic from "@anthropic-ai/sdk";
-import { GoogleGenAI } from "@google/genai";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
-import OpenAI from "openai";
-import type WebSocket from "ws";
 
-import { createA2aClient } from "./a2a.ts";
 import { endpointPath } from "./public-types.ts";
 import type {
+    A2aClient,
+    AnthropicClient,
     ClientOptions,
     EndpointPath,
+    GoogleAiStudioClient,
+    OaicClient,
     RunnerWorkloadConnection,
     RunnerWorkloads,
+    WebSocketClient,
     WorkloadMid,
 } from "./public-types.ts";
 import type { HostedWorkloadConnectionConfig, RunnerEnv } from "./runner-env.ts";
 import { parseBind } from "./transport.ts";
 import { HostedMcpClientTransport } from "./mcp.ts";
 import { createExternalLlmFetch, localEndpointBaseUrl } from "./oaic.ts";
-import { connectHostedWebSocket } from "./websocket.ts";
 
 export class RunnerWorkloadsImpl implements RunnerWorkloads {
     readonly workloads: ReadonlyArray<RunnerWorkloadConnection>;
@@ -63,13 +61,14 @@ export class RunnerWorkloadsImpl implements RunnerWorkloads {
         workloadMidValue: WorkloadMid,
         endpointPathValue: EndpointPath,
         options: ClientOptions = {},
-    ): Promise<OpenAI> {
+    ): Promise<OaicClient> {
         if (options.signal?.aborted) {
             throw new Error(`OAIC client request aborted for workload \`${workloadMidValue}\``);
         }
 
         const connection = this.connections.get(connectionKey(workloadMidValue, endpointPathValue))!;
         const endpoint = endpointPath(endpointPathValue);
+        const { default: OpenAI } = await import("openai");
         return new OpenAI({
             apiKey: "capakit-local",
             baseURL: localEndpointBaseUrl(endpoint, "/v1"),
@@ -81,13 +80,14 @@ export class RunnerWorkloadsImpl implements RunnerWorkloads {
         workloadMidValue: WorkloadMid,
         endpointPathValue: EndpointPath,
         options: ClientOptions = {},
-    ): Promise<Anthropic> {
+    ): Promise<AnthropicClient> {
         if (options.signal?.aborted) {
             throw new Error(`Anthropic client request aborted for workload \`${workloadMidValue}\``);
         }
 
         const connection = this.connections.get(connectionKey(workloadMidValue, endpointPathValue))!;
         const endpoint = endpointPath(endpointPathValue);
+        const { default: Anthropic } = await import("@anthropic-ai/sdk");
         return new Anthropic({
             apiKey: "capakit-local",
             baseURL: localEndpointBaseUrl(endpoint),
@@ -99,7 +99,7 @@ export class RunnerWorkloadsImpl implements RunnerWorkloads {
         workloadMidValue: WorkloadMid,
         endpointPathValue: EndpointPath,
         options: ClientOptions = {},
-    ): Promise<GoogleGenAI> {
+    ): Promise<GoogleAiStudioClient> {
         if (options.signal?.aborted) {
             throw new Error(`Google AI Studio client request aborted for workload \`${workloadMidValue}\``);
         }
@@ -108,6 +108,7 @@ export class RunnerWorkloadsImpl implements RunnerWorkloads {
         const endpoint = endpointPath(endpointPathValue);
         const hostedFetch = createExternalLlmFetch(parseBind(connection.bind), endpoint);
         const defaultFetch = globalThis.fetch.bind(globalThis);
+        const { GoogleGenAI } = await import("@google/genai");
         globalThis.fetch = (input, init) => {
             const request = new Request(input, init);
             const url = new URL(request.url);
@@ -129,12 +130,13 @@ export class RunnerWorkloadsImpl implements RunnerWorkloads {
         workloadMidValue: WorkloadMid,
         endpointPathValue: EndpointPath,
         options: ClientOptions = {},
-    ): Promise<A2AClient> {
+    ): Promise<A2aClient> {
         if (options.signal?.aborted) {
             throw new Error(`A2A client request aborted for workload \`${workloadMidValue}\``);
         }
 
         const connection = this.connections.get(connectionKey(workloadMidValue, endpointPathValue))!;
+        const { createA2aClient } = await import("./a2a.ts");
         return await createA2aClient(
             parseBind(connection.bind),
             endpointPath(endpointPathValue),
@@ -145,12 +147,13 @@ export class RunnerWorkloadsImpl implements RunnerWorkloads {
         workloadMidValue: WorkloadMid,
         endpointPathValue: EndpointPath,
         options: ClientOptions = {},
-    ): Promise<WebSocket> {
+    ): Promise<WebSocketClient> {
         if (options.signal?.aborted) {
             throw new Error(`WebSocket request aborted for workload \`${workloadMidValue}\``);
         }
 
         const connection = this.connections.get(connectionKey(workloadMidValue, endpointPathValue))!;
+        const { connectHostedWebSocket } = await import("./websocket.ts");
         return await connectHostedWebSocket(
             parseBind(connection.bind),
             endpointPath(endpointPathValue),

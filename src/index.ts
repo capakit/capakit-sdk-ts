@@ -5,7 +5,6 @@ import type { Server as HttpServer } from "node:http";
 import {
     HostedMcpBridge,
 } from "./mcp.ts";
-import { createA2aHandler } from "./a2a.ts";
 import { installHostConsoleLogging } from "./logging.ts";
 import { RunnerMountsImpl } from "./mounts.ts";
 import { RunnerSecretsImpl } from "./secrets.ts";
@@ -39,7 +38,6 @@ import {
 import { RunnerWorkloadsImpl } from "./workloads.ts";
 
 export * from "./public-types.ts";
-export { createA2aHandler } from "./a2a.ts";
 
 type MountedHttpTransport = {
     endpoint: EndpointPath;
@@ -345,14 +343,20 @@ class HostedRunnerSdk implements RunnerSdk {
     }
 
     private a2aTransport(mount: RunnerA2aMount): MountedHttpTransport {
+        let handlerPromise: Promise<RunnerHttpMount["handler"]> | null = null;
         return this.runnerHttpHandlerTransport(
             "a2a",
             mount.endpoint,
-            createA2aHandler({
-                agentCard: mount.agentCard,
-                executor: mount.executor,
-                taskStore: mount.taskStore,
-            }),
+            async (request, context) => {
+                handlerPromise ??= import("./a2a.ts").then(({ createA2aHandler }) =>
+                    createA2aHandler({
+                        agentCard: mount.agentCard as never,
+                        executor: mount.executor as never,
+                        taskStore: mount.taskStore as never,
+                    }),
+                );
+                return await (await handlerPromise)(request, context);
+            },
         );
     }
 
