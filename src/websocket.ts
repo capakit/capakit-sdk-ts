@@ -1,17 +1,25 @@
 import type { IncomingMessage } from "node:http";
+import { createRequire } from "node:module";
 import { createConnection, type Socket } from "node:net";
+import { dirname, join } from "node:path";
 import type { Duplex } from "node:stream";
 
-import WebSocket, { WebSocketServer } from "ws";
+import type WebSocket from "ws";
 
 import type { EndpointPath, HostedBind } from "./public-types.ts";
+
+const require = createRequire(import.meta.url);
+const wsRoot = dirname(require.resolve("ws/package.json"));
+const wsModule = require(join(wsRoot, "index.js")) as typeof import("ws");
+const WebSocketCtor = wsModule.WebSocket ?? wsModule;
+const WebSocketServerCtor = wsModule.WebSocketServer;
 
 export function acceptWebSocket(
     request: IncomingMessage,
     socket: Duplex,
     head: Buffer,
 ): WebSocket {
-    const server = new WebSocketServer({ noServer: true });
+    const server = new WebSocketServerCtor({ noServer: true });
     let accepted: WebSocket | undefined;
     server.handleUpgrade(request, socket, head, (webSocket) => {
         accepted = webSocket;
@@ -35,7 +43,7 @@ export async function connectHostedWebSocket(
 
     return await new Promise<WebSocket>((resolve, reject) => {
         let settled = false;
-        const webSocket = new WebSocket(webSocketUrl(bind, endpoint), webSocketOptions(bind));
+        const webSocket = new WebSocketCtor(webSocketUrl(bind, endpoint), webSocketOptions(bind));
 
         const settle = (result: { webSocket: WebSocket } | { error: Error }): void => {
             if (settled) {
