@@ -66,6 +66,31 @@ describe("acceptWebSocket", () => {
             server.close();
         }
     });
+
+    test("delivers messages received before handler registration", async () => {
+        const server = createHostedServer(
+            async () => new Response("upgrade required", { status: 426 }),
+            (request, socket, head) => {
+                const ws = acceptWebSocket(request, socket, head);
+                ws.send("ready");
+            },
+        );
+        const port = nextPort();
+        await listen(server, { kind: "tcp", host: "127.0.0.1", port });
+
+        try {
+            const client = await connectHostedWebSocket(
+                { kind: "tcp", host: "127.0.0.1", port },
+                endpointPath("/ws"),
+            );
+            await new Promise((resolve) => setTimeout(resolve, 10));
+            const received = new Promise<unknown>((resolve) => client.onMessage(resolve));
+            await expect(received).resolves.toBe("ready");
+        } finally {
+            server.closeAllConnections();
+            server.close();
+        }
+    });
 });
 
 let portCursor = 42000 + (process.pid % 10000);

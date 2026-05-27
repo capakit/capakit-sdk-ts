@@ -99,6 +99,7 @@ class HostedWebSocket implements RunnerWebSocket {
     private readonly socket: Duplex;
     private buffer = Buffer.alloc(0);
     private messageHandlers: MessageHandler[] = [];
+    private pendingMessages: RunnerWebSocketMessage[] = [];
     private closeHandlers: CloseHandler[] = [];
     private closed = false;
 
@@ -140,6 +141,11 @@ class HostedWebSocket implements RunnerWebSocket {
 
     onMessage(handler: MessageHandler): void {
         this.messageHandlers.push(handler);
+        const pending = this.pendingMessages;
+        this.pendingMessages = [];
+        for (const message of pending) {
+            void Promise.resolve(handler(message)).catch(() => this.close(1011, "handler error"));
+        }
     }
 
     onClose(handler: CloseHandler): void {
@@ -178,6 +184,10 @@ class HostedWebSocket implements RunnerWebSocket {
     }
 
     private emitMessage(message: RunnerWebSocketMessage): void {
+        if (this.messageHandlers.length === 0) {
+            this.pendingMessages.push(message);
+            return;
+        }
         for (const handler of this.messageHandlers) {
             void Promise.resolve(handler(message)).catch(() => this.close(1011, "handler error"));
         }
