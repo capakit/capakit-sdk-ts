@@ -1,10 +1,53 @@
 import type {
+    ClientOptions,
     HostedBind,
     EndpointPath,
+    RunnerHttpHandler,
+    RunnerSdk,
+    RunnerSdkMount,
+    WorkloadMid,
 } from "./public-types.ts";
 import { createHostedFetch } from "./transport.ts";
+import { optionalModule } from "./optional-imports.ts";
 
 const UPSTREAM_PATH_HEADER = "x-capakit-external-llm-upstream-path";
+
+export type OaicClient = import("openai").default;
+
+export type OaicProvider = {
+    createClient(
+        workloadMid: WorkloadMid,
+        endpointPath: EndpointPath,
+        options?: ClientOptions,
+    ): Promise<OaicClient>;
+    mount(options: OaicMountOptions): RunnerSdkMount;
+};
+
+export type OaicMountOptions = {
+    endpoint: EndpointPath;
+    handler: RunnerHttpHandler;
+};
+
+export function oaicProvider(sdk: RunnerSdk): OaicProvider {
+    return {
+        async createClient(workloadMid, endpointPath, options = {}) {
+            const endpoint = sdk.workloads.endpoint(workloadMid, endpointPath, options);
+            const { default: OpenAI } = await import(optionalModule("openai"));
+            return new OpenAI({
+                apiKey: "capakit-local",
+                baseURL: localEndpointBaseUrl(endpoint.endpoint, "/v1"),
+                fetch: createExternalLlmFetch(endpoint.bind, endpoint.endpoint),
+            });
+        },
+        mount(options) {
+            return {
+                protocol: "oaic",
+                endpoint: options.endpoint,
+                handler: options.handler,
+            };
+        },
+    };
+}
 
 export function localEndpointBaseUrl(
     endpoint: EndpointPath,

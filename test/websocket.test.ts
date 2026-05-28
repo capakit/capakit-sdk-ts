@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { describe, expect, test } from "vitest";
 import WebSocket, { type RawData, WebSocketServer } from "ws";
 
-import { endpointPath } from "../src/public-types.ts";
+import { endpointPath } from "../src/ids.ts";
 import { listen } from "../src/transport.ts";
 import { connectHostedWebSocket } from "../src/websocket.ts";
 

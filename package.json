@@ -16,20 +16,36 @@
     ],
     "exports": {
         ".": {
-            "types": "./src/index.ts",
+            "types": "./src/index-types.ts",
             "default": "./src/index.ts"
         },
         "./a2a": {
-            "types": "./src/a2a.ts",
+            "types": "./src/provider-types/a2a.ts",
             "default": "./src/a2a.ts"
         },
+        "./anthropic": {
+            "types": "./src/provider-types/anthropic.ts",
+            "default": "./src/anthropic.ts"
+        },
+        "./google-ai-studio": {
+            "types": "./src/provider-types/google-ai-studio.ts",
+            "default": "./src/google-ai-studio.ts"
+        },
         "./mcp": {
-            "types": "./src/mcp.ts",
+            "types": "./src/provider-types/mcp.ts",
             "default": "./src/mcp.ts"
+        },
+        "./oaic": {
+            "types": "./src/provider-types/oaic.ts",
+            "default": "./src/oaic.ts"
         },
         "./public-types": {
             "types": "./src/public-types.ts",
             "default": "./src/public-types.ts"
+        },
+        "./websocket": {
+            "types": "./src/provider-types/websocket.ts",
+            "default": "./src/websocket.ts"
         }
     },
     "scripts": {
@@ -37,6 +53,7 @@
         "typecheck": "tsc --noEmit",
         "check": "npm run typecheck && npm test",
         "pack:dry-run": "npm pack --dry-run",
+        "render:agents-md-types": "node scripts/render-agents-md-types.mjs",
         "dev-release": "scripts/dev-release.sh",
         "release": "scripts/release.sh"
     },

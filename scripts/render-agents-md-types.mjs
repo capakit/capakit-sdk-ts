@@ -1,0 +1,67 @@
+import { readFileSync, writeFileSync } from "node:fs";
+import { resolve } from "node:path";
+
+const MODULES = [
+    {
+        name: "@capakit/sdk",
+        files: ["src/public-types.ts"],
+        append: "export function createRunnerSdk(options?: RunnerSdkOptions): RunnerSdk;\n",
+    },
+    { name: "@capakit/sdk/mcp", files: ["src/provider-types/mcp.ts"] },
+    { name: "@capakit/sdk/oaic", files: ["src/provider-types/oaic.ts"] },
+    { name: "@capakit/sdk/anthropic", files: ["src/provider-types/anthropic.ts"] },
+    {
+        name: "@capakit/sdk/google-ai-studio",
+        files: ["src/provider-types/google-ai-studio.ts"],
+    },
+    { name: "@capakit/sdk/a2a", files: ["src/provider-types/a2a.ts"] },
+    { name: "@capakit/sdk/websocket", files: ["src/provider-types/websocket.ts"] },
+];
+
+const outArgIndex = process.argv.indexOf("--out");
+const outPath = outArgIndex >= 0 ? process.argv[outArgIndex + 1] : undefined;
+const repoRoot = resolve(import.meta.dirname, "..");
+
+const rendered = MODULES.map(renderModule).join("\n\n");
+
+if (outPath) {
+    writeFileSync(resolve(process.cwd(), outPath), `${rendered}\n`);
+} else {
+    process.stdout.write(`${rendered}\n`);
+}
+
+function renderModule(module) {
+    const body = module.files
+        .map((file) => readFileSync(resolve(repoRoot, file), "utf8"))
+        .map(stripImports)
+        .join("\n")
+        .concat(module.append ? `\n${module.append}` : "")
+        .replaceAll("export declare function", "export function")
+        .trim();
+    return `declare module "${module.name}" {\n${indent(body)}\n}`;
+}
+
+function stripImports(source) {
+    const out = [];
+    let skippingImport = false;
+    for (const line of source.split("\n")) {
+        const trimmed = line.trimStart();
+        if (skippingImport) {
+            skippingImport = !trimmed.endsWith(";");
+            continue;
+        }
+        if (trimmed.startsWith("import type ")) {
+            skippingImport = !trimmed.endsWith(";");
+            continue;
+        }
+        out.push(line);
+    }
+    return out.join("\n").trim();
+}
+
+function indent(source) {
+    return source
+        .split("\n")
+        .map((line) => (line ? `    ${line}` : line))
+        .join("\n");
+}

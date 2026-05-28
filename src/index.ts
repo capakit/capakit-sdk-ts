@@ -2,20 +2,14 @@ import { existsSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 import type { Server as HttpServer } from "node:http";
 
-import {
-    HostedMcpBridge,
-} from "./mcp.ts";
 import { installHostConsoleLogging } from "./logging.ts";
 import { RunnerMountsImpl } from "./mounts.ts";
 import { RunnerSecretsImpl } from "./secrets.ts";
 import type {
     EndpointPath,
     HostedBind,
-    RunnerA2aMount,
     RunnerPresenceLifecycleContext,
     RunnerPresenceLifecycleHook,
-    RunnerHttpMount,
-    RunnerOaicMount,
     RunnerSdk,
     RunnerSdkMount,
     RunnerSdkOptions,
@@ -36,9 +30,14 @@ import {
     removeSocket,
 } from "./transport.ts";
 import { RunnerWorkloadsImpl } from "./workloads.ts";
-import { optionalModule } from "./optional-imports.ts";
 
-export * from "./public-types.ts";
+export type * from "./public-types.ts";
+export {
+    endpointPath,
+    hostMountMid,
+    secretMid,
+    workloadMid,
+} from "./ids.ts";
 
 type MountedHttpTransport = {
     endpoint: EndpointPath;
@@ -81,29 +80,13 @@ class HostedRunnerSdk implements RunnerSdk {
 
     mount(mount: RunnerSdkMount): void {
         switch (mount.protocol) {
-            case "mcp":
-                this.mountHttpTransport(this.mcpServerTransport(mount));
-                return;
             case "http":
-                this.mountHttpTransport(
-                    this.runnerHttpHandlerTransport(
-                        "http",
-                        mount.endpoint,
-                        mount.handler,
-                    ),
-                );
-                return;
             case "oaic":
-                this.mountHttpTransport(
-                    this.runnerHttpHandlerTransport(
-                        "oaic",
-                        mount.endpoint,
-                        mount.handler,
-                    ),
-                );
-                return;
+            case "mcp":
             case "a2a":
-                this.mountHttpTransport(this.a2aTransport(mount));
+                this.mountHttpTransport(
+                    this.runnerHttpHandlerTransport(mount),
+                );
                 return;
         }
     }
@@ -332,52 +315,18 @@ class HostedRunnerSdk implements RunnerSdk {
         this.mountedTransports.set(transport.endpoint, transport);
     }
 
-    private mcpServerTransport(mount: HostedRunnerSdkMcpMount): MountedHttpTransport {
-        const mcpBridge = new HostedMcpBridge();
-        mcpBridge.mount(mount.server);
+    private runnerHttpHandlerTransport(mount: RunnerSdkMount): MountedHttpTransport {
         return {
             endpoint: mount.endpoint,
-            start: () => mcpBridge.start(),
-            stop: () => mcpBridge.stop(),
-            handleRequest: (request) => mcpBridge.handleRequest(request),
-        };
-    }
-
-    private a2aTransport(mount: RunnerA2aMount): MountedHttpTransport {
-        let handlerPromise: Promise<RunnerHttpMount["handler"]> | null = null;
-        return this.runnerHttpHandlerTransport(
-            "a2a",
-            mount.endpoint,
-            async (request, context) => {
-                handlerPromise ??= import(optionalModule("./a2a.ts")).then(({ createA2aHandler }) =>
-                    createA2aHandler({
-                        agentCard: mount.agentCard as never,
-                        executor: mount.executor as never,
-                        taskStore: mount.taskStore as never,
-                    }),
-                );
-                return await (await handlerPromise)(request, context);
-            },
-        );
-    }
-
-    private runnerHttpHandlerTransport(
-        protocol:
-            | RunnerHttpMount["protocol"]
-            | RunnerOaicMount["protocol"]
-            | RunnerA2aMount["protocol"],
-        endpoint: EndpointPath,
-        handler: RunnerHttpMount["handler"],
-    ): MountedHttpTransport {
-        return {
-            endpoint,
+            start: mount.start,
+            stop: mount.stop,
             handleRequest: async (request) => {
-                return await handler(
+                return await mount.handler(
                     request,
                     {
                         ...this.lifecycleContext(),
-                        protocol,
-                        endpoint,
+                        protocol: mount.protocol,
+                        endpoint: mount.endpoint,
                     },
                 );
             },
@@ -395,8 +344,6 @@ class HostedRunnerSdk implements RunnerSdk {
 export function createRunnerSdk(options: RunnerSdkOptions = {}): RunnerSdk {
     return new HostedRunnerSdk(options);
 }
-
-type HostedRunnerSdkMcpMount = Extract<RunnerSdkMount, { protocol: "mcp" }>;
 
 function currentParentPid(): number {
     try {

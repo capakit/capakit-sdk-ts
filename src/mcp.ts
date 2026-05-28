@@ -1,14 +1,76 @@
+import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import type { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
 import type { JSONRPCMessage } from "@modelcontextprotocol/sdk/types.js";
 
 import { createHostedFetch } from "./transport.ts";
-import type { EndpointPath, HostedBind, McpSessionId } from "./public-types.ts";
+import type {
+    ClientOptions,
+    EndpointPath,
+    HostedBind,
+    RunnerSdk,
+    RunnerSdkMount,
+    WorkloadMid,
+} from "./public-types.ts";
 
 const MCP_STREAM_CONTENT_TYPE = "application/x-ndjson";
 const MCP_JSON_CONTENT_TYPE = "application/json; charset=utf-8";
 const MCP_SSE_CONTENT_TYPE = "text/event-stream; charset=utf-8";
+
+export type McpClient = Client;
+export type McpSessionId = string;
+
+export type McpProvider = {
+    createClient(
+        workloadMid: WorkloadMid,
+        endpointPath: EndpointPath,
+        options?: ClientOptions,
+    ): Promise<McpClient>;
+    mount(options: McpMountOptions): RunnerSdkMount;
+    close(): Promise<void>;
+};
+
+export type McpMountOptions = {
+    endpoint: EndpointPath;
+    server: McpServer;
+};
+
+export function mcpProvider(sdk: RunnerSdk): McpProvider {
+    const clients = new Set<Client>();
+    return {
+        async createClient(workloadMid, endpointPath, options = {}) {
+            const endpoint = sdk.workloads.endpoint(workloadMid, endpointPath, options);
+            const client = new Client({
+                name: "@capakit/sdk",
+                version: "0.0.0",
+            });
+            const transport = new HostedMcpClientTransport(
+                endpoint.bind,
+                endpoint.endpoint,
+            );
+            await client.connect(transport, { timeout: options.timeoutMs });
+            clients.add(client);
+            return client;
+        },
+        mount(options) {
+            const bridge = new HostedMcpBridge();
+            bridge.mount(options.server);
+            return {
+                protocol: "mcp",
+                endpoint: options.endpoint,
+                start: () => bridge.start(),
+                stop: () => bridge.stop(),
+                handler: (request) => bridge.handleRequest(request),
+            };
+        },
+        async close() {
+            const active = Array.from(clients);
+            clients.clear();
+            await Promise.all(active.map((client) => client.close()));
+        },
+    };
+}
 
 type PendingResponse = {
     resolve: (response: JSONRPCMessage) => void;

@@ -12,13 +12,54 @@ import type {
 } from "@a2a-js/sdk/server";
 
 import type {
+    ClientOptions,
     EndpointPath,
     HostedBind,
     RunnerHttpHandler,
+    RunnerSdk,
+    RunnerSdkMount,
+    WorkloadMid,
 } from "./public-types.ts";
 import { createHostedFetch } from "./transport.ts";
 
 const AGENT_CARD_SUFFIX = `/${AGENT_CARD_PATH}`;
+
+export type A2aAgentCard = AgentCard;
+export type A2aAgentExecutor = AgentExecutor;
+export type A2aTaskStore = TaskStore;
+export type A2aClient = A2AClient;
+
+export type A2aProvider = {
+    createClient(
+        workloadMid: WorkloadMid,
+        endpointPath: EndpointPath,
+        options?: ClientOptions,
+    ): Promise<A2aClient>;
+    mount(options: A2aMountOptions): RunnerSdkMount;
+};
+
+export type A2aMountOptions = {
+    endpoint: EndpointPath;
+    agentCard: A2aAgentCard;
+    executor: A2aAgentExecutor;
+    taskStore?: A2aTaskStore;
+};
+
+export function a2aProvider(sdk: RunnerSdk): A2aProvider {
+    return {
+        async createClient(workloadMid, endpointPath, options = {}) {
+            const endpoint = sdk.workloads.endpoint(workloadMid, endpointPath, options);
+            return await createA2aClient(endpoint.bind, endpoint.endpoint);
+        },
+        mount(options) {
+            return {
+                protocol: "a2a",
+                endpoint: options.endpoint,
+                handler: createA2aHandler(options),
+            };
+        },
+    };
+}
 
 export function createA2aHandler(options: {
     agentCard: AgentCard;

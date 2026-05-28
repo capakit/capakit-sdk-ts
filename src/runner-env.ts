@@ -2,7 +2,7 @@ import {
     endpointPath,
     hostMountMid,
     workloadMid,
-} from "./public-types.ts";
+} from "./ids.ts";
 import type {
     EndpointPath,
     HostMount,

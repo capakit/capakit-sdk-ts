@@ -5,7 +5,13 @@ import { dirname, join } from "node:path";
 
 import type WebSocket from "ws";
 
-import type { EndpointPath, HostedBind } from "./public-types.ts";
+import type {
+    ClientOptions,
+    EndpointPath,
+    HostedBind,
+    RunnerSdk,
+    WorkloadMid,
+} from "./public-types.ts";
 import { optionalPackageJson } from "./optional-imports.ts";
 
 const require = createRequire(import.meta.url);
@@ -28,6 +34,29 @@ type RawWebSocket = WebSocket & {
     _url: string;
     setSocket(socket: Socket, head: Buffer, options: typeof RAW_WEB_SOCKET_OPTIONS): void;
 };
+
+export type WebSocketClient = WebSocket;
+
+export type WebSocketProvider = {
+    connect(
+        workloadMid: WorkloadMid,
+        endpointPath: EndpointPath,
+        options?: ClientOptions,
+    ): Promise<WebSocketClient>;
+};
+
+export function webSocketProvider(sdk: RunnerSdk): WebSocketProvider {
+    return {
+        async connect(workloadMid, endpointPath, options = {}) {
+            const endpoint = sdk.workloads.endpoint(workloadMid, endpointPath, options);
+            return await connectHostedWebSocket(
+                endpoint.bind,
+                endpoint.endpoint,
+                options.signal,
+            );
+        },
+    };
+}
 
 export async function connectHostedWebSocket(
     bind: HostedBind,

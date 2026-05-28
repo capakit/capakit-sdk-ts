@@ -1,7 +1,7 @@
 import { describe, expect, test } from "vitest";
 
 import { RunnerMountsImpl } from "../src/mounts.ts";
-import { hostMountMid } from "../src/public-types.ts";
+import { hostMountMid } from "../src/ids.ts";
 
 describe("RunnerMountsImpl", () => {
     test("gets and lists configured host mounts", () => {

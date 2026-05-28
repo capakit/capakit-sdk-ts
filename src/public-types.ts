@@ -1,6 +1,3 @@
-import type { Client as McpClient } from "@modelcontextprotocol/sdk/client/index.js";
-import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-
 declare const CAPAKIT_BRAND: unique symbol;
 
 type Brand<T, Name extends string> = T & {
@@ -9,45 +6,22 @@ type Brand<T, Name extends string> = T & {
 
 export type HostedBindValue = string;
 export type PresenceId = string;
-export type McpSessionId = string;
 export type EndpointPath = Brand<string, "EndpointPath">;
 export type WorkloadMid = Brand<string, "WorkloadMid">;
 export type SecretMid = Brand<string, "SecretMid">;
 export type HostMountMid = Brand<string, "HostMountMid">;
 export type RunnerProtocol = "http" | "mcp" | "oaic" | "a2a";
 export type HostMountAccess = "read_only" | "read_write";
-export type A2aAgentCard = unknown;
-export type A2aAgentExecutor = unknown;
-export type A2aTaskStore = unknown;
-export type A2aClient = unknown;
-export type AnthropicClient = unknown;
-export type GoogleAiStudioClient = unknown;
-export type OaicClient = unknown;
-export type WebSocketClient = unknown;
 
 export type HostedBind =
     | { kind: "unix"; path: string }
     | { kind: "tcp"; host: string; port: number }
     | { kind: "pipe"; name: string };
 
-export function endpointPath(value: string): EndpointPath {
-    if (value.length === 0) {
-        throw new Error("endpoint path must not be empty");
-    }
-    return (value.startsWith("/") ? value : `/${value}`) as EndpointPath;
-}
-
-export function workloadMid(value: string): WorkloadMid {
-    return value as WorkloadMid;
-}
-
-export function secretMid(value: string): SecretMid {
-    return value as SecretMid;
-}
-
-export function hostMountMid(value: string): HostMountMid {
-    return value as HostMountMid;
-}
+export declare function endpointPath(value: string): EndpointPath;
+export declare function workloadMid(value: string): WorkloadMid;
+export declare function secretMid(value: string): SecretMid;
+export declare function hostMountMid(value: string): HostMountMid;
 
 export type ClientOptions = {
     signal?: AbortSignal;
@@ -60,38 +34,17 @@ export type RunnerWorkloadConnection = {
     protocol: RunnerProtocol;
 };
 
+export type RunnerWorkloadEndpoint = RunnerWorkloadConnection & {
+    bind: HostedBind;
+};
+
 export type RunnerWorkloads = {
     readonly workloads: ReadonlyArray<RunnerWorkloadConnection>;
-    mcpClient(
+    endpoint(
         workloadMid: WorkloadMid,
         endpointPath: EndpointPath,
         options?: ClientOptions,
-    ): Promise<McpClient>;
-    oaicClient(
-        workloadMid: WorkloadMid,
-        endpointPath: EndpointPath,
-        options?: ClientOptions,
-    ): Promise<OaicClient>;
-    anthropicClient(
-        workloadMid: WorkloadMid,
-        endpointPath: EndpointPath,
-        options?: ClientOptions,
-    ): Promise<AnthropicClient>;
-    googleAiStudioClient(
-        workloadMid: WorkloadMid,
-        endpointPath: EndpointPath,
-        options?: ClientOptions,
-    ): Promise<GoogleAiStudioClient>;
-    a2aClient(
-        workloadMid: WorkloadMid,
-        endpointPath: EndpointPath,
-        options?: ClientOptions,
-    ): Promise<A2aClient>;
-    webSocket(
-        workloadMid: WorkloadMid,
-        endpointPath: EndpointPath,
-        options?: ClientOptions,
-    ): Promise<WebSocketClient>;
+    ): RunnerWorkloadEndpoint;
     close(): Promise<void>;
 };
 
@@ -117,14 +70,8 @@ export type RunnerSdkOptions = {
     onShutdown?: RunnerShutdownHook;
 };
 
-export type RunnerMcpMount = {
-    protocol: "mcp";
-    endpoint: EndpointPath;
-    server: McpServer;
-};
-
 export type RunnerHttpHandlerContext = RunnerPresenceLifecycleContext & {
-    protocol: Exclude<RunnerProtocol, "mcp">;
+    protocol: RunnerProtocol;
     endpoint: EndpointPath;
 };
 
@@ -133,31 +80,19 @@ export type RunnerHttpHandler = (
     context: RunnerHttpHandlerContext,
 ) => Response | Promise<Response>;
 
-export type RunnerOaicMount = {
-    protocol: "oaic";
-    endpoint: EndpointPath;
-    handler: RunnerHttpHandler;
-};
-
 export type RunnerHttpMount = {
     protocol: "http";
     endpoint: EndpointPath;
     handler: RunnerHttpHandler;
 };
 
-export type RunnerA2aMount = {
-    protocol: "a2a";
+export type RunnerSdkMount = {
+    protocol: RunnerProtocol;
     endpoint: EndpointPath;
-    agentCard: A2aAgentCard;
-    executor: A2aAgentExecutor;
-    taskStore?: A2aTaskStore;
+    handler: RunnerHttpHandler;
+    start?: () => Promise<void>;
+    stop?: () => Promise<void>;
 };
-
-export type RunnerSdkMount =
-    | RunnerMcpMount
-    | RunnerHttpMount
-    | RunnerOaicMount
-    | RunnerA2aMount;
 
 export type RunnerSignal = "SIGINT" | "SIGTERM";
 

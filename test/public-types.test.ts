@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vitest";
 
-import { endpointPath } from "../src/public-types.ts";
+import { endpointPath } from "../src/ids.ts";
 
 describe("endpointPath", () => {
     test("normalizes relative endpoint paths", () => {
