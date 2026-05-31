@@ -1,7 +1,9 @@
 import { createHash, randomBytes } from "node:crypto";
+import { createRequire } from "node:module";
 import { createConnection, type Socket } from "node:net";
+import { dirname, join } from "node:path";
 
-import WebSocket from "ws";
+import type WebSocket from "ws";
 
 import type {
     ClientOptions,
@@ -12,7 +14,10 @@ import type {
 } from "./public-types.ts";
 import { registerSdkClientCleanup } from "./client-lifecycle.ts";
 
-const WebSocketCtor = WebSocket as unknown as RawWebSocketConstructor;
+const require = createRequire(import.meta.url);
+const wsRoot = dirname(require.resolve("ws/package.json"));
+const wsModule = require(join(wsRoot, "index.js")) as typeof import("ws");
+const WebSocketCtor = (wsModule.WebSocket ?? wsModule) as unknown as RawWebSocketConstructor;
 const WEB_SOCKET_GUID = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
 const RAW_WEB_SOCKET_OPTIONS = {
     allowSynchronousEvents: true,
@@ -31,6 +36,7 @@ type RawWebSocket = WebSocket & {
 };
 
 type RawWebSocketConstructor = {
+    CLOSED: number;
     new(
         address: string | URL | null,
         protocols?: string | string[],
@@ -53,7 +59,7 @@ export async function connectWebSocket(
         options.signal,
     );
     registerSdkClientCleanup(sdk, () => {
-        if (webSocket.readyState === WebSocket.CLOSED) {
+        if (webSocket.readyState === WebSocketCtor.CLOSED) {
             return;
         }
         webSocket.terminate();
