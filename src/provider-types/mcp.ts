@@ -3,16 +3,12 @@ import type { RunnerSdk, RunnerSdkMount, ClientOptions, EndpointPath, WorkloadMi
 export type McpClient = import("@modelcontextprotocol/sdk/client/index.js").Client;
 export type McpServer = import("@modelcontextprotocol/sdk/server/mcp.js").McpServer;
 export type McpSessionId = string;
-export type McpMountOptions = { endpoint: EndpointPath; server: McpServer };
 export type MountMcpOptions = { endpoint: string | EndpointPath; server: McpServer };
-export type McpProvider = {
-    createClient(
-        workloadMid: WorkloadMid,
-        endpointPath: EndpointPath,
-        options?: ClientOptions,
-    ): Promise<McpClient>;
-    mount(options: McpMountOptions): RunnerSdkMount;
-    close(): Promise<void>;
-};
+export declare function createMcpClient(
+    sdk: RunnerSdk,
+    workloadMid: WorkloadMid,
+    endpointPath: EndpointPath,
+    options?: ClientOptions,
+): Promise<McpClient>;
 export declare function mountMcp(sdk: RunnerSdk, options: MountMcpOptions): void;
-export declare function mcpProvider(sdk: RunnerSdk): McpProvider;
+export declare function createMcpMount(options: MountMcpOptions): RunnerSdkMount;

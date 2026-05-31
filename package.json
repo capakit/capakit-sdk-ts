@@ -44,7 +44,7 @@
             "default": "./src/public-types.ts"
         },
         "./testing": {
-            "types": "./src/testing.ts",
+            "types": "./src/provider-types/testing.ts",
             "default": "./src/testing.ts"
         },
         "./websocket": {

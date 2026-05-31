@@ -7,6 +7,7 @@ import type {
     RunnerSdkMount,
     WorkloadMid,
 } from "./public-types.ts";
+import { endpointPath as normalizeEndpointPath } from "./ids.ts";
 import { createHostedFetch } from "./transport.ts";
 import { optionalModule } from "./optional-imports.ts";
 
@@ -14,38 +15,35 @@ const UPSTREAM_PATH_HEADER = "x-capakit-external-llm-upstream-path";
 
 export type OaicClient = import("openai").default;
 
-export type OaicProvider = {
-    createClient(
-        workloadMid: WorkloadMid,
-        endpointPath: EndpointPath,
-        options?: ClientOptions,
-    ): Promise<OaicClient>;
-    mount(options: OaicMountOptions): RunnerSdkMount;
-};
-
 export type OaicMountOptions = {
-    endpoint: EndpointPath;
+    endpoint: string | EndpointPath;
     handler: RunnerHttpHandler;
 };
 
-export function oaicProvider(sdk: RunnerSdk): OaicProvider {
+export async function createOaicClient(
+    sdk: RunnerSdk,
+    workloadMid: WorkloadMid,
+    endpointPath: EndpointPath,
+    options: ClientOptions = {},
+): Promise<OaicClient> {
+    const endpoint = sdk.workloads.endpoint(workloadMid, endpointPath, options);
+    const { default: OpenAI } = await import(optionalModule("openai"));
+    return new OpenAI({
+        apiKey: "capakit-local",
+        baseURL: localEndpointBaseUrl(endpoint.endpoint, "/v1"),
+        fetch: createExternalLlmFetch(endpoint.bind, endpoint.endpoint),
+    });
+}
+
+export function mountOaic(sdk: RunnerSdk, options: OaicMountOptions): void {
+    sdk.mount(createOaicMount(options));
+}
+
+export function createOaicMount(options: OaicMountOptions): RunnerSdkMount {
     return {
-        async createClient(workloadMid, endpointPath, options = {}) {
-            const endpoint = sdk.workloads.endpoint(workloadMid, endpointPath, options);
-            const { default: OpenAI } = await import(optionalModule("openai"));
-            return new OpenAI({
-                apiKey: "capakit-local",
-                baseURL: localEndpointBaseUrl(endpoint.endpoint, "/v1"),
-                fetch: createExternalLlmFetch(endpoint.bind, endpoint.endpoint),
-            });
-        },
-        mount(options) {
-            return {
-                protocol: "oaic",
-                endpoint: options.endpoint,
-                handler: options.handler,
-            };
-        },
+        protocol: "oaic",
+        endpoint: normalizeEndpoint(options.endpoint),
+        handler: options.handler,
     };
 }
 
@@ -79,4 +77,8 @@ function upstreamPathFromLocalUrl(requestUrl: string, endpoint: EndpointPath): s
         return `${url.pathname.slice(endpoint.length)}${url.search}`;
     }
     return path;
+}
+
+function normalizeEndpoint(value: string | EndpointPath): EndpointPath {
+    return typeof value === "string" ? normalizeEndpointPath(value) : value;
 }

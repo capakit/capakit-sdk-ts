@@ -5,17 +5,16 @@ export type A2aAgentExecutor = import("@a2a-js/sdk/server").AgentExecutor;
 export type A2aTaskStore = import("@a2a-js/sdk/server").TaskStore;
 export type A2aClient = import("@a2a-js/sdk/client").A2AClient;
 export type A2aMountOptions = {
-    endpoint: EndpointPath;
+    endpoint: string | EndpointPath;
     agentCard: A2aAgentCard;
     executor: A2aAgentExecutor;
     taskStore?: A2aTaskStore;
 };
-export type A2aProvider = {
-    createClient(
-        workloadMid: WorkloadMid,
-        endpointPath: EndpointPath,
-        options?: ClientOptions,
-    ): Promise<A2aClient>;
-    mount(options: A2aMountOptions): RunnerSdkMount;
-};
-export declare function a2aProvider(sdk: RunnerSdk): A2aProvider;
+export declare function createA2aClient(
+    sdk: RunnerSdk,
+    workloadMid: WorkloadMid,
+    endpointPath: EndpointPath,
+    options?: ClientOptions,
+): Promise<A2aClient>;
+export declare function mountA2a(sdk: RunnerSdk, options: A2aMountOptions): void;
+export declare function createA2aMount(options: A2aMountOptions): RunnerSdkMount;

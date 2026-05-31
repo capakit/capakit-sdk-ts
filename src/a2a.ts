@@ -20,6 +20,7 @@ import type {
     RunnerSdkMount,
     WorkloadMid,
 } from "./public-types.ts";
+import { endpointPath as normalizeEndpointPath } from "./ids.ts";
 import { createHostedFetch } from "./transport.ts";
 
 const AGENT_CARD_SUFFIX = `/${AGENT_CARD_PATH}`;
@@ -29,35 +30,32 @@ export type A2aAgentExecutor = AgentExecutor;
 export type A2aTaskStore = TaskStore;
 export type A2aClient = A2AClient;
 
-export type A2aProvider = {
-    createClient(
-        workloadMid: WorkloadMid,
-        endpointPath: EndpointPath,
-        options?: ClientOptions,
-    ): Promise<A2aClient>;
-    mount(options: A2aMountOptions): RunnerSdkMount;
-};
-
 export type A2aMountOptions = {
-    endpoint: EndpointPath;
+    endpoint: string | EndpointPath;
     agentCard: A2aAgentCard;
     executor: A2aAgentExecutor;
     taskStore?: A2aTaskStore;
 };
 
-export function a2aProvider(sdk: RunnerSdk): A2aProvider {
+export async function createA2aClient(
+    sdk: RunnerSdk,
+    workloadMid: WorkloadMid,
+    endpointPath: EndpointPath,
+    options: ClientOptions = {},
+): Promise<A2aClient> {
+    const endpoint = sdk.workloads.endpoint(workloadMid, endpointPath, options);
+    return await createHostedA2aClient(endpoint.bind, endpoint.endpoint);
+}
+
+export function mountA2a(sdk: RunnerSdk, options: A2aMountOptions): void {
+    sdk.mount(createA2aMount(options));
+}
+
+export function createA2aMount(options: A2aMountOptions): RunnerSdkMount {
     return {
-        async createClient(workloadMid, endpointPath, options = {}) {
-            const endpoint = sdk.workloads.endpoint(workloadMid, endpointPath, options);
-            return await createA2aClient(endpoint.bind, endpoint.endpoint);
-        },
-        mount(options) {
-            return {
-                protocol: "a2a",
-                endpoint: options.endpoint,
-                handler: createA2aHandler(options),
-            };
-        },
+        protocol: "a2a",
+        endpoint: normalizeEndpoint(options.endpoint),
+        handler: createA2aHandler(options),
     };
 }
 
@@ -100,7 +98,7 @@ export function createA2aHandler(options: {
     };
 }
 
-export async function createA2aClient(
+export async function createHostedA2aClient(
     bind: HostedBind,
     endpoint: EndpointPath,
 ): Promise<A2AClient> {
@@ -164,4 +162,8 @@ function isAsyncIterable<T>(value: unknown): value is AsyncIterable<T> {
         value !== null &&
         Symbol.asyncIterator in value
     );
+}
+
+function normalizeEndpoint(value: string | EndpointPath): EndpointPath {
+    return typeof value === "string" ? normalizeEndpointPath(value) : value;
 }

@@ -22,69 +22,48 @@ const MCP_SSE_CONTENT_TYPE = "text/event-stream; charset=utf-8";
 export type McpClient = Client;
 export type McpSessionId = string;
 
-export type McpProvider = {
-    createClient(
-        workloadMid: WorkloadMid,
-        endpointPath: EndpointPath,
-        options?: ClientOptions,
-    ): Promise<McpClient>;
-    mount(options: McpMountOptions): RunnerSdkMount;
-    close(): Promise<void>;
-};
-
-export type McpMountOptions = {
-    endpoint: EndpointPath;
-    server: McpServer;
-};
-
 export type MountMcpOptions = {
     endpoint: string | EndpointPath;
     server: McpServer;
 };
 
-export function mountMcp(sdk: RunnerSdk, options: MountMcpOptions): void {
-    sdk.mount(mcpProvider(sdk).mount({
-        endpoint: typeof options.endpoint === "string"
-            ? normalizeEndpointPath(options.endpoint)
-            : options.endpoint,
-        server: options.server,
-    }));
+export async function createMcpClient(
+    sdk: RunnerSdk,
+    workloadMid: WorkloadMid,
+    endpointPath: EndpointPath,
+    options: ClientOptions = {},
+): Promise<McpClient> {
+    const endpoint = sdk.workloads.endpoint(workloadMid, endpointPath, options);
+    const client = new Client({
+        name: "@capakit/sdk",
+        version: "0.0.0",
+    });
+    const transport = new HostedMcpClientTransport(
+        endpoint.bind,
+        endpoint.endpoint,
+    );
+    await client.connect(transport, { timeout: options.timeoutMs });
+    return client;
 }
 
-export function mcpProvider(sdk: RunnerSdk): McpProvider {
-    const clients = new Set<Client>();
+export function mountMcp(sdk: RunnerSdk, options: MountMcpOptions): void {
+    sdk.mount(createMcpMount(options));
+}
+
+export function createMcpMount(options: MountMcpOptions): RunnerSdkMount {
+    const bridge = new HostedMcpBridge();
+    bridge.mount(options.server);
     return {
-        async createClient(workloadMid, endpointPath, options = {}) {
-            const endpoint = sdk.workloads.endpoint(workloadMid, endpointPath, options);
-            const client = new Client({
-                name: "@capakit/sdk",
-                version: "0.0.0",
-            });
-            const transport = new HostedMcpClientTransport(
-                endpoint.bind,
-                endpoint.endpoint,
-            );
-            await client.connect(transport, { timeout: options.timeoutMs });
-            clients.add(client);
-            return client;
-        },
-        mount(options) {
-            const bridge = new HostedMcpBridge();
-            bridge.mount(options.server);
-            return {
-                protocol: "mcp",
-                endpoint: options.endpoint,
-                start: () => bridge.start(),
-                stop: () => bridge.stop(),
-                handler: (request) => bridge.handleRequest(request),
-            };
-        },
-        async close() {
-            const active = Array.from(clients);
-            clients.clear();
-            await Promise.all(active.map((client) => client.close()));
-        },
+        protocol: "mcp",
+        endpoint: normalizeEndpoint(options.endpoint),
+        start: () => bridge.start(),
+        stop: () => bridge.stop(),
+        handler: (request) => bridge.handleRequest(request),
     };
+}
+
+function normalizeEndpoint(value: string | EndpointPath): EndpointPath {
+    return typeof value === "string" ? normalizeEndpointPath(value) : value;
 }
 
 type PendingResponse = {

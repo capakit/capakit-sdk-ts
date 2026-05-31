@@ -37,25 +37,18 @@ type RawWebSocket = WebSocket & {
 
 export type WebSocketClient = WebSocket;
 
-export type WebSocketProvider = {
-    connect(
-        workloadMid: WorkloadMid,
-        endpointPath: EndpointPath,
-        options?: ClientOptions,
-    ): Promise<WebSocketClient>;
-};
-
-export function webSocketProvider(sdk: RunnerSdk): WebSocketProvider {
-    return {
-        async connect(workloadMid, endpointPath, options = {}) {
-            const endpoint = sdk.workloads.endpoint(workloadMid, endpointPath, options);
-            return await connectHostedWebSocket(
-                endpoint.bind,
-                endpoint.endpoint,
-                options.signal,
-            );
-        },
-    };
+export async function connectWebSocket(
+    sdk: RunnerSdk,
+    workloadMid: WorkloadMid,
+    endpointPath: EndpointPath,
+    options: ClientOptions = {},
+): Promise<WebSocketClient> {
+    const endpoint = sdk.workloads.endpoint(workloadMid, endpointPath, options);
+    return await connectHostedWebSocket(
+        endpoint.bind,
+        endpoint.endpoint,
+        options.signal,
+    );
 }
 
 export async function connectHostedWebSocket(
