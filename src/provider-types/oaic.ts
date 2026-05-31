@@ -1,6 +1,18 @@
 import type { RunnerSdk, RunnerSdkMount, RunnerHttpHandler, ClientOptions, EndpointPath, WorkloadMid } from "../public-types.ts";
 
-export type OaicClient = import("openai").default;
+export type OaicClient = {
+    chat: {
+        completions: {
+            create(input: unknown): Promise<any>;
+        };
+    };
+    images: {
+        generate(input: unknown): Promise<any>;
+    };
+    responses: {
+        create(input: unknown): Promise<any>;
+    };
+};
 export type OaicMountOptions = { endpoint: string | EndpointPath; handler: RunnerHttpHandler };
 export declare function createOaicClient(
     sdk: RunnerSdk,
