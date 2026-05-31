@@ -3,14 +3,14 @@ import type { RunnerSdk, RunnerSdkMount, RunnerHttpHandler, ClientOptions, Endpo
 export type OaicClient = {
     chat: {
         completions: {
-            create(input: unknown): Promise<any>;
+            create(...args: any[]): Promise<any>;
         };
     };
     images: {
-        generate(input: unknown): Promise<any>;
+        generate(...args: any[]): Promise<any>;
     };
     responses: {
-        create(input: unknown): Promise<any>;
+        create(...args: any[]): Promise<any>;
     };
 };
 export type OaicMountOptions = { endpoint: string | EndpointPath; handler: RunnerHttpHandler };
