@@ -7,6 +7,7 @@ import type {
     RunnerSdkMount,
     WorkloadMid,
 } from "./public-types.ts";
+import { registerSdkCloseableClient } from "./client-lifecycle.ts";
 import { endpointPath as normalizeEndpointPath } from "./ids.ts";
 import { createHostedFetch } from "./transport.ts";
 import OpenAI from "openai";
@@ -27,11 +28,13 @@ export async function createOaicClient(
     options: ClientOptions = {},
 ): Promise<OaicClient> {
     const endpoint = sdk.workloads.endpoint(workloadMid, endpointPath, options);
-    return new OpenAI({
+    const client = new OpenAI({
         apiKey: "capakit-local",
         baseURL: localEndpointBaseUrl(endpoint.endpoint, "/v1"),
         fetch: createExternalLlmFetch(endpoint.bind, endpoint.endpoint),
     });
+    registerSdkCloseableClient(sdk, client);
+    return client;
 }
 
 export function mountOaic(sdk: RunnerSdk, options: OaicMountOptions): void {

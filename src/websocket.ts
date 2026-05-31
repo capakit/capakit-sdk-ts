@@ -1,5 +1,4 @@
 import { createHash, randomBytes } from "node:crypto";
-import { EventEmitter } from "node:events";
 import { createConnection, type Socket } from "node:net";
 
 import WebSocket from "ws";
@@ -11,8 +10,33 @@ import type {
     RunnerSdk,
     WorkloadMid,
 } from "./public-types.ts";
+import { registerSdkClientCleanup } from "./client-lifecycle.ts";
 
+const WebSocketCtor = WebSocket as unknown as RawWebSocketConstructor;
 const WEB_SOCKET_GUID = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
+const RAW_WEB_SOCKET_OPTIONS = {
+    allowSynchronousEvents: true,
+    autoPong: true,
+    closeTimeout: 30_000,
+    maxBufferedChunks: 1024 * 1024,
+    maxFragments: 128 * 1024,
+    maxPayload: 100 * 1024 * 1024,
+    skipUTF8Validation: false,
+};
+
+type RawWebSocket = WebSocket & {
+    _isServer: boolean;
+    _url: string;
+    setSocket(socket: Socket, head: Buffer, options: typeof RAW_WEB_SOCKET_OPTIONS): void;
+};
+
+type RawWebSocketConstructor = {
+    new(
+        address: string | URL | null,
+        protocols?: string | string[],
+        options?: typeof RAW_WEB_SOCKET_OPTIONS,
+    ): RawWebSocket;
+};
 
 export type WebSocketClient = WebSocket;
 
@@ -23,11 +47,18 @@ export async function connectWebSocket(
     options: ClientOptions = {},
 ): Promise<WebSocketClient> {
     const endpoint = sdk.workloads.endpoint(workloadMid, endpointPath, options);
-    return await connectHostedWebSocket(
+    const webSocket = await connectHostedWebSocket(
         endpoint.bind,
         endpoint.endpoint,
         options.signal,
     );
+    registerSdkClientCleanup(sdk, () => {
+        if (webSocket.readyState === WebSocket.CLOSED) {
+            return;
+        }
+        webSocket.terminate();
+    });
+    return webSocket;
 }
 
 export async function connectHostedWebSocket(
@@ -44,7 +75,7 @@ export async function connectHostedWebSocket(
 
     return await new Promise<WebSocket>((resolve, reject) => {
         let settled = false;
-        const webSocket = new WebSocket(webSocketUrl(bind, endpoint));
+        const webSocket = new WebSocketCtor(webSocketUrl(bind, endpoint));
 
         const settle = (result: { webSocket: WebSocket } | { error: Error }): void => {
             if (settled) {
@@ -85,6 +116,8 @@ async function connectRawHostedWebSocket(
         let buffered = Buffer.alloc(0);
         const socket = connectRawSocket(bind);
         const key = randomBytes(16).toString("base64");
+        const url = webSocketUrl(bind, endpoint);
+        const webSocket = newRawWebSocket(url);
 
         const settle = (result: { webSocket: WebSocket } | { error: Error }): void => {
             if (settled) {
@@ -93,7 +126,7 @@ async function connectRawHostedWebSocket(
             settled = true;
             signal?.removeEventListener("abort", abort);
             socket.off("connect", onConnect);
-            socket.off("data", onHandshakeData);
+            socket.off("data", onData);
             socket.off("error", onError);
             if ("error" in result) {
                 socket.destroy();
@@ -108,7 +141,7 @@ async function connectRawHostedWebSocket(
         const onConnect = (): void => {
             socket.write(rawUpgradeRequest(endpoint, key));
         };
-        const onHandshakeData = (chunk: Buffer): void => {
+        const onData = (chunk: Buffer): void => {
             buffered = Buffer.concat([buffered, chunk]);
             const headerEnd = buffered.indexOf("\r\n\r\n");
             if (headerEnd < 0) {
@@ -116,11 +149,12 @@ async function connectRawHostedWebSocket(
             }
             try {
                 assertUpgradeAccepted(buffered.subarray(0, headerEnd).toString("latin1"), key);
+                const head = buffered.subarray(headerEnd + 4);
                 socket.off("connect", onConnect);
-                socket.off("data", onHandshakeData);
+                socket.off("data", onData);
                 socket.off("error", onError);
-                const webSocket = new RawHostedWebSocket(socket, buffered.subarray(headerEnd + 4));
-                settle({ webSocket: webSocket as unknown as WebSocket });
+                webSocket.setSocket(socket, head, RAW_WEB_SOCKET_OPTIONS);
+                settle({ webSocket });
             } catch (error) {
                 settle({ error: normalizeError(error) });
             }
@@ -131,7 +165,7 @@ async function connectRawHostedWebSocket(
 
         signal?.addEventListener("abort", abort, { once: true });
         socket.once("connect", onConnect);
-        socket.on("data", onHandshakeData);
+        socket.on("data", onData);
         socket.once("error", onError);
     });
 }
@@ -154,6 +188,17 @@ function connectRawSocket(bind: HostedBind): Socket {
         return createConnection({ path: bind.name });
     }
     throw new Error(`raw websocket socket unsupported for bind kind ${bind.kind}`);
+}
+
+function newRawWebSocket(url: string): RawWebSocket {
+    const webSocket = new WebSocketCtor(
+        null as never,
+        undefined,
+        RAW_WEB_SOCKET_OPTIONS,
+    ) as RawWebSocket;
+    webSocket._isServer = false;
+    webSocket._url = url;
+    return webSocket;
 }
 
 function rawUpgradeRequest(endpoint: EndpointPath, key: string): string {
@@ -192,161 +237,6 @@ function assertUpgradeAccepted(responseHead: string, key: string): void {
     if (headers.get("sec-websocket-accept") !== accept) {
         throw new Error("invalid websocket accept header");
     }
-}
-
-class RawHostedWebSocket extends EventEmitter {
-    private buffered: Buffer;
-    private closed = false;
-
-    constructor(
-        private readonly socket: Socket,
-        head: Buffer,
-    ) {
-        super();
-        this.buffered = head;
-        this.socket.on("data", (chunk) => this.onData(chunk));
-        this.socket.once("error", (error) => this.emit("error", normalizeError(error)));
-        this.socket.once("close", () => {
-            this.closed = true;
-            this.emit("close");
-        });
-        if (this.buffered.length > 0) {
-            this.drainFrames();
-        }
-    }
-
-    send(data: string | ArrayBuffer | ArrayBufferView | Buffer): void {
-        if (this.closed) {
-            throw new Error("websocket is closed");
-        }
-        const isText = typeof data === "string";
-        const payload = isText ? Buffer.from(data) : Buffer.from(asBytes(data));
-        this.socket.write(encodeClientFrame(isText ? 0x1 : 0x2, payload));
-    }
-
-    close(): void {
-        if (this.closed) {
-            return;
-        }
-        this.socket.write(encodeClientFrame(0x8, Buffer.alloc(0)));
-        this.socket.end();
-    }
-
-    terminate(): void {
-        this.socket.destroy();
-    }
-
-    private onData(chunk: Buffer): void {
-        this.buffered = Buffer.concat([this.buffered, chunk]);
-        this.drainFrames();
-    }
-
-    private drainFrames(): void {
-        while (true) {
-            const frame = readFrame(this.buffered);
-            if (!frame) {
-                return;
-            }
-            this.buffered = this.buffered.subarray(frame.consumed);
-            if (frame.opcode === 0x1) {
-                this.emit("message", frame.payload.toString(), false);
-            } else if (frame.opcode === 0x2) {
-                this.emit("message", frame.payload, true);
-            } else if (frame.opcode === 0x8) {
-                this.closed = true;
-                this.socket.end();
-                this.emit("close");
-            } else if (frame.opcode === 0x9) {
-                this.socket.write(encodeClientFrame(0xA, frame.payload));
-            }
-        }
-    }
-}
-
-type DecodedFrame = {
-    opcode: number;
-    payload: Buffer;
-    consumed: number;
-};
-
-function readFrame(buffer: Buffer): DecodedFrame | undefined {
-    if (buffer.length < 2) {
-        return undefined;
-    }
-    const opcode = buffer[0] & 0x0f;
-    const masked = (buffer[1] & 0x80) !== 0;
-    let length = buffer[1] & 0x7f;
-    let offset = 2;
-    if (length === 126) {
-        if (buffer.length < offset + 2) {
-            return undefined;
-        }
-        length = buffer.readUInt16BE(offset);
-        offset += 2;
-    } else if (length === 127) {
-        if (buffer.length < offset + 8) {
-            return undefined;
-        }
-        const bigLength = buffer.readBigUInt64BE(offset);
-        if (bigLength > BigInt(Number.MAX_SAFE_INTEGER)) {
-            throw new Error("websocket frame is too large");
-        }
-        length = Number(bigLength);
-        offset += 8;
-    }
-    const maskOffset = offset;
-    if (masked) {
-        offset += 4;
-    }
-    if (buffer.length < offset + length) {
-        return undefined;
-    }
-    const payload = Buffer.from(buffer.subarray(offset, offset + length));
-    if (masked) {
-        const mask = buffer.subarray(maskOffset, maskOffset + 4);
-        for (let index = 0; index < payload.length; index += 1) {
-            payload[index] ^= mask[index % 4];
-        }
-    }
-    return {
-        opcode,
-        payload,
-        consumed: offset + length,
-    };
-}
-
-function encodeClientFrame(opcode: number, payload: Buffer): Buffer {
-    const length = payload.length;
-    const lengthBytes = length < 126 ? 0 : length <= 0xffff ? 2 : 8;
-    const header = Buffer.alloc(2 + lengthBytes + 4);
-    header[0] = 0x80 | opcode;
-    if (length < 126) {
-        header[1] = 0x80 | length;
-    } else if (length <= 0xffff) {
-        header[1] = 0x80 | 126;
-        header.writeUInt16BE(length, 2);
-    } else {
-        header[1] = 0x80 | 127;
-        header.writeBigUInt64BE(BigInt(length), 2);
-    }
-    const maskOffset = 2 + lengthBytes;
-    const mask = randomBytes(4);
-    mask.copy(header, maskOffset);
-    const masked = Buffer.from(payload);
-    for (let index = 0; index < masked.length; index += 1) {
-        masked[index] ^= mask[index % 4];
-    }
-    return Buffer.concat([header, masked]);
-}
-
-function asBytes(value: ArrayBuffer | ArrayBufferView | Buffer): Uint8Array {
-    if (value instanceof Uint8Array) {
-        return value;
-    }
-    if (value instanceof ArrayBuffer) {
-        return new Uint8Array(value);
-    }
-    return new Uint8Array(value.buffer, value.byteOffset, value.byteLength);
 }
 
 function normalizeError(error: unknown): Error {

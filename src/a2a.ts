@@ -11,6 +11,7 @@ import type {
     TaskStore,
 } from "@a2a-js/sdk/server";
 
+import { registerSdkCloseableClient } from "./client-lifecycle.ts";
 import type {
     ClientOptions,
     EndpointPath,
@@ -44,7 +45,9 @@ export async function createA2aClient(
     options: ClientOptions = {},
 ): Promise<A2aClient> {
     const endpoint = sdk.workloads.endpoint(workloadMid, endpointPath, options);
-    return await createHostedA2aClient(endpoint.bind, endpoint.endpoint);
+    const client = await createHostedA2aClient(endpoint.bind, endpoint.endpoint);
+    registerSdkCloseableClient(sdk, client);
+    return client;
 }
 
 export function mountA2a(sdk: RunnerSdk, options: A2aMountOptions): void {

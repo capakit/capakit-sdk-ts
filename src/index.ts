@@ -2,6 +2,10 @@ import { existsSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 import type { Server as HttpServer } from "node:http";
 
+import {
+    RUNNER_SDK_CLIENT_LIFECYCLE,
+    type RunnerSdkClientCleanup,
+} from "./client-lifecycle.ts";
 import { installHostConsoleLogging } from "./logging.ts";
 import { RunnerMountsImpl } from "./mounts.ts";
 import { RunnerSecretsImpl } from "./secrets.ts";
@@ -58,6 +62,7 @@ class HostedRunnerSdk implements RunnerSdk {
     private readonly onPresenceStart?: RunnerPresenceLifecycleHook;
     private readonly onShutdown?: RunnerShutdownHook;
     private readonly mountedTransports = new Map<string, MountedHttpTransport>();
+    private readonly clientCleanups = new Set<RunnerSdkClientCleanup>();
     private server: HttpServer | null = null;
     private stopPromise: Promise<void> | null = null;
     private parentMonitor?: ReturnType<typeof setInterval>;
@@ -89,6 +94,10 @@ class HostedRunnerSdk implements RunnerSdk {
                 );
                 return;
         }
+    }
+
+    [RUNNER_SDK_CLIENT_LIFECYCLE](cleanup: RunnerSdkClientCleanup): void {
+        this.clientCleanups.add(cleanup);
     }
 
     hijackConsoleLogging(): () => void {
@@ -155,6 +164,7 @@ class HostedRunnerSdk implements RunnerSdk {
             }
             await this.workloads.close();
             await this.secrets.close();
+            await this.closeRegisteredClients();
             await Promise.all(
                 Array.from(this.mountedTransports.values()).map(async (mount) => {
                     await mount.stop?.();
@@ -169,6 +179,12 @@ class HostedRunnerSdk implements RunnerSdk {
         if (hookError) {
             throw hookError;
         }
+    }
+
+    private async closeRegisteredClients(): Promise<void> {
+        const cleanups = Array.from(this.clientCleanups);
+        this.clientCleanups.clear();
+        await Promise.all(cleanups.map((cleanup) => cleanup()));
     }
 
     private lifecycleContext(): RunnerPresenceLifecycleContext {

@@ -4,6 +4,7 @@ import type {
     RunnerSdk,
     WorkloadMid,
 } from "./public-types.ts";
+import { registerSdkCloseableClient } from "./client-lifecycle.ts";
 import { createExternalLlmFetch, localEndpointBaseUrl } from "./oaic.ts";
 import { GoogleGenAI } from "@google/genai";
 
@@ -26,11 +27,13 @@ export async function createGoogleAiStudioClient(
         }
         return defaultFetch(request);
     };
-    return new GoogleGenAI({
+    const client = new GoogleGenAI({
         apiKey: "capakit-local",
         httpOptions: {
             baseUrl: localEndpointBaseUrl(endpoint.endpoint),
             apiVersion: "v1beta",
         },
     });
+    registerSdkCloseableClient(sdk, client);
+    return client;
 }

@@ -4,6 +4,7 @@ import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import type { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
 import type { JSONRPCMessage } from "@modelcontextprotocol/sdk/types.js";
 
+import { registerSdkClientCleanup } from "./client-lifecycle.ts";
 import { endpointPath as normalizeEndpointPath } from "./ids.ts";
 import { createHostedFetch } from "./transport.ts";
 import type {
@@ -43,6 +44,7 @@ export async function createMcpClient(
         endpoint.endpoint,
     );
     await client.connect(transport, { timeout: options.timeoutMs });
+    registerSdkClientCleanup(sdk, () => client.close());
     return client;
 }
 
