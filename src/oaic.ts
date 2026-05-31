@@ -38,7 +38,7 @@ export function mountOaic(sdk: RunnerSdk, options: OaicMountOptions): void {
     sdk.mount(createOaicMount(options));
 }
 
-export function createOaicMount(options: OaicMountOptions): RunnerSdkMount {
+function createOaicMount(options: OaicMountOptions): RunnerSdkMount {
     return {
         protocol: "oaic",
         endpoint: normalizeEndpoint(options.endpoint),

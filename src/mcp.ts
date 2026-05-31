@@ -50,7 +50,7 @@ export function mountMcp(sdk: RunnerSdk, options: MountMcpOptions): void {
     sdk.mount(createMcpMount(options));
 }
 
-export function createMcpMount(options: MountMcpOptions): RunnerSdkMount {
+function createMcpMount(options: MountMcpOptions): RunnerSdkMount {
     const bridge = new HostedMcpBridge();
     bridge.mount(options.server);
     return {

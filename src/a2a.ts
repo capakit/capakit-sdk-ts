@@ -51,7 +51,7 @@ export function mountA2a(sdk: RunnerSdk, options: A2aMountOptions): void {
     sdk.mount(createA2aMount(options));
 }
 
-export function createA2aMount(options: A2aMountOptions): RunnerSdkMount {
+function createA2aMount(options: A2aMountOptions): RunnerSdkMount {
     return {
         protocol: "a2a",
         endpoint: normalizeEndpoint(options.endpoint),
