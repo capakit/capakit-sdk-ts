@@ -1,9 +1,7 @@
 import { createHash, randomBytes } from "node:crypto";
-import { createRequire } from "node:module";
 import { createConnection, type Socket } from "node:net";
-import { dirname, join } from "node:path";
 
-import type WebSocket from "ws";
+import WebSocket from "ws";
 
 import type {
     ClientOptions,
@@ -12,12 +10,7 @@ import type {
     RunnerSdk,
     WorkloadMid,
 } from "./public-types.ts";
-import { optionalPackageJson } from "./optional-imports.ts";
 
-const require = createRequire(import.meta.url);
-const wsRoot = dirname(require.resolve(optionalPackageJson("ws")));
-const wsModule = require(join(wsRoot, "index.js")) as typeof import("ws");
-const WebSocketCtor = wsModule.WebSocket ?? wsModule;
 const WEB_SOCKET_GUID = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
 const RAW_WEB_SOCKET_OPTIONS = {
     allowSynchronousEvents: true,
@@ -65,7 +58,7 @@ export async function connectHostedWebSocket(
 
     return await new Promise<WebSocket>((resolve, reject) => {
         let settled = false;
-        const webSocket = new WebSocketCtor(webSocketUrl(bind, endpoint));
+        const webSocket = new WebSocket(webSocketUrl(bind, endpoint));
 
         const settle = (result: { webSocket: WebSocket } | { error: Error }): void => {
             if (settled) {
@@ -181,7 +174,7 @@ function connectRawSocket(bind: HostedBind): Socket {
 }
 
 function newRawWebSocket(url: string): RawWebSocket {
-    const webSocket = new WebSocketCtor(
+    const webSocket = new WebSocket(
         null as never,
         undefined,
         RAW_WEB_SOCKET_OPTIONS,

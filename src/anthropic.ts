@@ -5,9 +5,9 @@ import type {
     WorkloadMid,
 } from "./public-types.ts";
 import { createExternalLlmFetch, localEndpointBaseUrl } from "./oaic.ts";
-import { optionalModule } from "./optional-imports.ts";
+import Anthropic from "@anthropic-ai/sdk";
 
-export type AnthropicClient = import("@anthropic-ai/sdk").default;
+export type AnthropicClient = Anthropic;
 
 export async function createAnthropicClient(
     sdk: RunnerSdk,
@@ -16,7 +16,6 @@ export async function createAnthropicClient(
     options: ClientOptions = {},
 ): Promise<AnthropicClient> {
     const endpoint = sdk.workloads.endpoint(workloadMid, endpointPath, options);
-    const { default: Anthropic } = await import(optionalModule("@anthropic-ai/sdk"));
     return new Anthropic({
         apiKey: "capakit-local",
         baseURL: localEndpointBaseUrl(endpoint.endpoint),

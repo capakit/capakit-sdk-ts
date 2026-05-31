@@ -5,9 +5,9 @@ import type {
     WorkloadMid,
 } from "./public-types.ts";
 import { createExternalLlmFetch, localEndpointBaseUrl } from "./oaic.ts";
-import { optionalModule } from "./optional-imports.ts";
+import { GoogleGenAI } from "@google/genai";
 
-export type GoogleAiStudioClient = import("@google/genai").GoogleGenAI;
+export type GoogleAiStudioClient = GoogleGenAI;
 
 export async function createGoogleAiStudioClient(
     sdk: RunnerSdk,
@@ -18,7 +18,6 @@ export async function createGoogleAiStudioClient(
     const endpoint = sdk.workloads.endpoint(workloadMid, endpointPath, options);
     const hostedFetch = createExternalLlmFetch(endpoint.bind, endpoint.endpoint);
     const defaultFetch = globalThis.fetch.bind(globalThis);
-    const { GoogleGenAI } = await import(optionalModule("@google/genai"));
     globalThis.fetch = (input, init) => {
         const request = new Request(input, init);
         const url = new URL(request.url);

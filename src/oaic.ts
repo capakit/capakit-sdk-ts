@@ -9,11 +9,11 @@ import type {
 } from "./public-types.ts";
 import { endpointPath as normalizeEndpointPath } from "./ids.ts";
 import { createHostedFetch } from "./transport.ts";
-import { optionalModule } from "./optional-imports.ts";
+import OpenAI from "openai";
 
 const UPSTREAM_PATH_HEADER = "x-capakit-external-llm-upstream-path";
 
-export type OaicClient = import("openai").default;
+export type OaicClient = OpenAI;
 
 export type OaicMountOptions = {
     endpoint: string | EndpointPath;
@@ -27,7 +27,6 @@ export async function createOaicClient(
     options: ClientOptions = {},
 ): Promise<OaicClient> {
     const endpoint = sdk.workloads.endpoint(workloadMid, endpointPath, options);
-    const { default: OpenAI } = await import(optionalModule("openai"));
     return new OpenAI({
         apiKey: "capakit-local",
         baseURL: localEndpointBaseUrl(endpoint.endpoint, "/v1"),
