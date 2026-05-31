@@ -43,6 +43,10 @@
             "types": "./src/public-types.ts",
             "default": "./src/public-types.ts"
         },
+        "./testing": {
+            "types": "./src/testing.ts",
+            "default": "./src/testing.ts"
+        },
         "./websocket": {
             "types": "./src/provider-types/websocket.ts",
             "default": "./src/websocket.ts"
@@ -57,10 +61,9 @@
         "dev-release": "scripts/dev-release.sh",
         "release": "scripts/release.sh"
     },
-    "dependencies": {
-        "@modelcontextprotocol/sdk": "1.29.0"
-    },
+    "dependencies": {},
     "peerDependencies": {
+        "@modelcontextprotocol/sdk": "^1.29.0",
         "@a2a-js/sdk": "^0.3.4",
         "@anthropic-ai/sdk": "^0.93.0",
         "@google/genai": "^1.51.0",
@@ -68,6 +71,9 @@
         "ws": "^8.21.0"
     },
     "peerDependenciesMeta": {
+        "@modelcontextprotocol/sdk": {
+            "optional": true
+        },
         "@a2a-js/sdk": {
             "optional": true
         },
@@ -85,6 +91,7 @@
         }
     },
     "devDependencies": {
+        "@modelcontextprotocol/sdk": "1.29.0",
         "@a2a-js/sdk": "^0.3.4",
         "@anthropic-ai/sdk": "^0.93.0",
         "@google/genai": "^1.51.0",

@@ -4,6 +4,7 @@ import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import type { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
 import type { JSONRPCMessage } from "@modelcontextprotocol/sdk/types.js";
 
+import { endpointPath as normalizeEndpointPath } from "./ids.ts";
 import { createHostedFetch } from "./transport.ts";
 import type {
     ClientOptions,
@@ -35,6 +36,20 @@ export type McpMountOptions = {
     endpoint: EndpointPath;
     server: McpServer;
 };
+
+export type MountMcpOptions = {
+    endpoint: string | EndpointPath;
+    server: McpServer;
+};
+
+export function mountMcp(sdk: RunnerSdk, options: MountMcpOptions): void {
+    sdk.mount(mcpProvider(sdk).mount({
+        endpoint: typeof options.endpoint === "string"
+            ? normalizeEndpointPath(options.endpoint)
+            : options.endpoint,
+        server: options.server,
+    }));
+}
 
 export function mcpProvider(sdk: RunnerSdk): McpProvider {
     const clients = new Set<Client>();
