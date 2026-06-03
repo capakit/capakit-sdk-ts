@@ -53,9 +53,10 @@
         }
     },
     "scripts": {
+        "audit": "npm audit --audit-level=moderate",
         "test": "vitest run",
         "typecheck": "tsc --noEmit",
-        "check": "npm run typecheck && npm test",
+        "check": "npm run audit && npm run typecheck && npm test",
         "pack:dry-run": "npm pack --dry-run",
         "render:agents-md-types": "node scripts/render-agents-md-types.mjs",
         "dev-release": "scripts/dev-release.sh",
