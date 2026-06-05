@@ -24,9 +24,9 @@ Add provider packages only for the adapters your workload imports:
 ## Basic Workload
 
 ```ts
-import {createRunnerSdk, endpointPath} from "@capakit/sdk";
+import {createWorkloadSdk, endpointPath} from "@capakit/sdk";
 
-const sdk = createRunnerSdk();
+const sdk = createWorkloadSdk();
 sdk.hijackConsoleLogging();
 
 sdk.mount({
@@ -41,11 +41,11 @@ await sdk.start();
 ## MCP Endpoint
 
 ```ts
-import {createRunnerSdk} from "@capakit/sdk";
+import {createWorkloadSdk} from "@capakit/sdk";
 import {mountMcp} from "@capakit/sdk/mcp";
 import {McpServer} from "@modelcontextprotocol/sdk/server/mcp.js";
 
-const sdk = createRunnerSdk();
+const sdk = createWorkloadSdk();
 sdk.hijackConsoleLogging();
 
 const server = new McpServer({
@@ -83,10 +83,10 @@ import {
     hostMountMid,
     workloadMid,
 } from "@capakit/sdk";
-import type {RunnerSdk} from "@capakit/sdk";
+import type {WorkloadSdk} from "@capakit/sdk";
 import {createOaicClient} from "@capakit/sdk/oaic";
 
-export async function createModelRuntime(sdk: RunnerSdk) {
+export async function createModelRuntime(sdk: WorkloadSdk) {
     const models = sdk.mounts.get(hostMountMid("models"));
     if (!models) {
         throw new Error("missing required host mount `models`");
