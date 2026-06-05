@@ -4,13 +4,13 @@ import type { IncomingMessage, RequestOptions } from "node:http";
 import { parseBind } from "./transport.ts";
 import type { HostedBind } from "./public-types.ts";
 
-const BRIDGE_CONTENT_TYPE = "application/x-capakit-runner-bridge-jsonl";
+const BRIDGE_CONTENT_TYPE = "application/x-capakit-workload-bridge-jsonl";
 const MAX_FRAME_BYTES = 4 * 1024 * 1024;
 const MAX_BUFFER_BYTES = 8 * 1024 * 1024;
 
 type BridgeResponse = { id: string; ok: unknown } | { id: string; error: unknown };
 
-export class RunnerBridgeClient {
+export class WorkloadBridgeClient {
     private nextId = 1;
     private readonly bind: HostedBind;
 
@@ -71,7 +71,7 @@ export class RunnerBridgeClient {
                     settle(() =>
                         reject(
                             new Error(
-                                "runner bridge response ended without a matching response",
+                                "workload bridge response ended without a matching response",
                             ),
                         ),
                     );
@@ -89,7 +89,7 @@ export class RunnerBridgeClient {
 function encodeJsonLine(value: unknown): Buffer {
     const body = Buffer.from(JSON.stringify(value), "utf8");
     if (body.length > MAX_FRAME_BYTES) {
-        throw new Error("runner bridge request frame exceeds maximum size");
+        throw new Error("workload bridge request frame exceeds maximum size");
     }
     return Buffer.concat([body, Buffer.from("\n")]);
 }
@@ -101,7 +101,7 @@ class JsonLineParser {
         this.buffer = Buffer.concat([this.buffer, chunk]);
         if (this.buffer.length > MAX_BUFFER_BYTES) {
             this.buffer = Buffer.alloc(0);
-            throw new Error("runner bridge frame buffer limit exceeded");
+            throw new Error("workload bridge frame buffer limit exceeded");
         }
 
         const parsed: unknown[] = [];
@@ -121,7 +121,7 @@ class JsonLineParser {
             const bodyLength = body.length;
             if (bodyLength > MAX_FRAME_BYTES) {
                 this.buffer = Buffer.alloc(0);
-                throw new Error("runner bridge frame exceeds maximum size");
+                throw new Error("workload bridge frame exceeds maximum size");
             }
             parsed.push(JSON.parse(body.toString("utf8")));
         }
@@ -132,7 +132,7 @@ class JsonLineParser {
 function validateBridgeResponse(response: IncomingMessage): void {
     const status = response.statusCode ?? 0;
     if (status !== 200) {
-        throw new Error(`runner bridge open failed with status ${status || "unknown"}`);
+        throw new Error(`workload bridge open failed with status ${status || "unknown"}`);
     }
 
     const contentType = headerValue(response.headers["content-type"])
@@ -140,7 +140,7 @@ function validateBridgeResponse(response: IncomingMessage): void {
         .trim()
         .toLowerCase();
     if (contentType !== BRIDGE_CONTENT_TYPE) {
-        throw new Error(`runner bridge returned unexpected content-type \`${contentType}\``);
+        throw new Error(`workload bridge returned unexpected content-type \`${contentType}\``);
     }
 }
 
@@ -153,11 +153,11 @@ function headerValue(value: string | string[] | number | undefined): string {
 
 function decodeBridgeResponse(value: unknown): BridgeResponse {
     if (!value || typeof value !== "object" || Array.isArray(value)) {
-        throw new Error("runner bridge response must be an object");
+        throw new Error("workload bridge response must be an object");
     }
     const record = value as Record<string, unknown>;
     if (typeof record.id !== "string") {
-        throw new Error("runner bridge response is missing string id");
+        throw new Error("workload bridge response is missing string id");
     }
     if ("error" in record) {
         return {
@@ -171,7 +171,7 @@ function decodeBridgeResponse(value: unknown): BridgeResponse {
             ok: record.ok,
         };
     }
-    throw new Error("runner bridge response must include ok or error");
+    throw new Error("workload bridge response must include ok or error");
 }
 
 function bridgeRequestOptions(bind: HostedBind, contentLength: number): RequestOptions {
@@ -209,5 +209,5 @@ function formatRpcError(error: unknown): string {
     if (error && typeof error === "object" && "message" in error) {
         return String((error as { message: unknown }).message);
     }
-    return `runner bridge failed: ${JSON.stringify(error)}`;
+    return `workload bridge failed: ${JSON.stringify(error)}`;
 }

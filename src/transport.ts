@@ -37,7 +37,7 @@ export function parseBind(value: HostedBindValue): HostedBind {
         }
         return { kind: "pipe", name };
     }
-    throw new Error(`unsupported runner bind: ${value}`);
+    throw new Error(`unsupported hosted bind: ${value}`);
 }
 
 export function createHostedServer(

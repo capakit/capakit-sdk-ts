@@ -2,14 +2,14 @@ import type {
     HostMount,
     HostMountAccess,
     HostMountMid,
-    RunnerMounts,
+    HostMounts,
 } from "./public-types.ts";
-import type { RunnerEnv } from "./runner-env.ts";
+import type { WorkloadEnv } from "./workload-env.ts";
 
-export class RunnerMountsImpl implements RunnerMounts {
+export class HostMountsImpl implements HostMounts {
     private readonly mountByMid: ReadonlyMap<HostMountMid, HostMount>;
 
-    constructor(env: RunnerEnv) {
+    constructor(env: WorkloadEnv) {
         this.mountByMid = new Map(env.mounts.map((mount) => [mount.mid, mount]));
     }
 

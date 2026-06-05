@@ -5,7 +5,7 @@ const MODULES = [
     {
         name: "@capakit/sdk",
         files: ["src/public-types.ts"],
-        append: "export function createRunnerSdk(options?: RunnerSdkOptions): RunnerSdk;\n",
+        append: "export function createWorkloadSdk(options?: WorkloadSdkOptions): WorkloadSdk;\n",
     },
     { name: "@capakit/sdk/mcp", files: ["src/provider-types/mcp.ts"] },
     { name: "@capakit/sdk/testing", files: ["src/provider-types/testing.ts"] },

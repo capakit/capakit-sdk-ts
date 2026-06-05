@@ -29,9 +29,9 @@ describe("parseBind", () => {
     });
 
     test("parses pipe binds", () => {
-        expect(parseBind("pipe:capakit-runner")).toEqual({
+        expect(parseBind("pipe:capakit-workload")).toEqual({
             kind: "pipe",
-            name: "capakit-runner",
+            name: "capakit-workload",
         });
     });
 

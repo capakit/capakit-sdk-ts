@@ -16,9 +16,9 @@ import type {
     ClientOptions,
     EndpointPath,
     HostedBind,
-    RunnerHttpHandler,
-    RunnerSdk,
-    RunnerSdkMount,
+    WorkloadHttpHandler,
+    WorkloadSdk,
+    WorkloadSdkMount,
     WorkloadMid,
 } from "./public-types.ts";
 import { endpointPath as normalizeEndpointPath } from "./ids.ts";
@@ -39,7 +39,7 @@ export type A2aMountOptions = {
 };
 
 export async function createA2aClient(
-    sdk: RunnerSdk,
+    sdk: WorkloadSdk,
     workloadMid: WorkloadMid,
     endpointPath: EndpointPath,
     options: ClientOptions = {},
@@ -50,11 +50,11 @@ export async function createA2aClient(
     return client;
 }
 
-export function mountA2a(sdk: RunnerSdk, options: A2aMountOptions): void {
+export function mountA2a(sdk: WorkloadSdk, options: A2aMountOptions): void {
     sdk.mount(createA2aMount(options));
 }
 
-function createA2aMount(options: A2aMountOptions): RunnerSdkMount {
+function createA2aMount(options: A2aMountOptions): WorkloadSdkMount {
     return {
         protocol: "a2a",
         endpoint: normalizeEndpoint(options.endpoint),
@@ -66,7 +66,7 @@ export function createA2aHandler(options: {
     agentCard: AgentCard;
     executor: AgentExecutor;
     taskStore?: TaskStore;
-}): RunnerHttpHandler {
+}): WorkloadHttpHandler {
     const requestHandler = new DefaultRequestHandler(
         options.agentCard,
         options.taskStore ?? new InMemoryTaskStore(),

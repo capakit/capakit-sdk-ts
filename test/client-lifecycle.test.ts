@@ -1,24 +1,24 @@
 import { describe, expect, test } from "vitest";
 
 import {
-    RUNNER_SDK_CLIENT_LIFECYCLE,
-    type RunnerSdkClientCleanup,
+    WORKLOAD_SDK_CLIENT_LIFECYCLE,
+    type WorkloadSdkClientCleanup,
 } from "../src/client-lifecycle.ts";
-import { createRunnerSdk } from "../src/index.ts";
-import type { RunnerSdk } from "../src/public-types.ts";
-import { RUNNER_ENV_KEYS } from "../src/runner-env.ts";
+import { createWorkloadSdk } from "../src/index.ts";
+import type { WorkloadSdk } from "../src/public-types.ts";
+import { WORKLOAD_ENV_KEYS } from "../src/workload-env.ts";
 
-type InternalRunnerSdk = RunnerSdk & {
-    [RUNNER_SDK_CLIENT_LIFECYCLE]?: (cleanup: RunnerSdkClientCleanup) => void;
+type InternalWorkloadSdk = WorkloadSdk & {
+    [WORKLOAD_SDK_CLIENT_LIFECYCLE]?: (cleanup: WorkloadSdkClientCleanup) => void;
 };
 
-describe("runner SDK client lifecycle", () => {
+describe("workload SDK client lifecycle", () => {
     test("stop closes registered SDK clients once", async () => {
-        const restoreEnv = withRunnerEnv();
+        const restoreEnv = withWorkloadEnv();
         try {
-            const sdk = createRunnerSdk() as InternalRunnerSdk;
+            const sdk = createWorkloadSdk() as InternalWorkloadSdk;
             let closed = 0;
-            sdk[RUNNER_SDK_CLIENT_LIFECYCLE]?.(() => {
+            sdk[WORKLOAD_SDK_CLIENT_LIFECYCLE]?.(() => {
                 closed += 1;
             });
 
@@ -32,16 +32,16 @@ describe("runner SDK client lifecycle", () => {
     });
 });
 
-function withRunnerEnv(): () => void {
+function withWorkloadEnv(): () => void {
     const previous = {
-        managedIngressBind: process.env[RUNNER_ENV_KEYS.managedIngressBind],
-        runnerBridgeBind: process.env[RUNNER_ENV_KEYS.runnerBridgeBind],
+        workloadIngressBind: process.env[WORKLOAD_ENV_KEYS.workloadIngressBind],
+        workloadBridgeBind: process.env[WORKLOAD_ENV_KEYS.workloadBridgeBind],
     };
-    process.env[RUNNER_ENV_KEYS.managedIngressBind] = "tcp:127.0.0.1:4100";
-    process.env[RUNNER_ENV_KEYS.runnerBridgeBind] = "tcp:127.0.0.1:4101";
+    process.env[WORKLOAD_ENV_KEYS.workloadIngressBind] = "tcp:127.0.0.1:4100";
+    process.env[WORKLOAD_ENV_KEYS.workloadBridgeBind] = "tcp:127.0.0.1:4101";
     return () => {
-        restoreEnvValue(RUNNER_ENV_KEYS.managedIngressBind, previous.managedIngressBind);
-        restoreEnvValue(RUNNER_ENV_KEYS.runnerBridgeBind, previous.runnerBridgeBind);
+        restoreEnvValue(WORKLOAD_ENV_KEYS.workloadIngressBind, previous.workloadIngressBind);
+        restoreEnvValue(WORKLOAD_ENV_KEYS.workloadBridgeBind, previous.workloadBridgeBind);
     };
 }
 

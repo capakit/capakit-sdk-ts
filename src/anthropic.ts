@@ -1,7 +1,7 @@
 import type {
     ClientOptions,
     EndpointPath,
-    RunnerSdk,
+    WorkloadSdk,
     WorkloadMid,
 } from "./public-types.ts";
 import { registerSdkCloseableClient } from "./client-lifecycle.ts";
@@ -11,7 +11,7 @@ import Anthropic from "@anthropic-ai/sdk";
 export type AnthropicClient = Anthropic;
 
 export async function createAnthropicClient(
-    sdk: RunnerSdk,
+    sdk: WorkloadSdk,
     workloadMid: WorkloadMid,
     endpointPath: EndpointPath,
     options: ClientOptions = {},

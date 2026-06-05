@@ -2,9 +2,9 @@ import type {
     ClientOptions,
     HostedBind,
     EndpointPath,
-    RunnerHttpHandler,
-    RunnerSdk,
-    RunnerSdkMount,
+    WorkloadHttpHandler,
+    WorkloadSdk,
+    WorkloadSdkMount,
     WorkloadMid,
 } from "./public-types.ts";
 import { registerSdkCloseableClient } from "./client-lifecycle.ts";
@@ -18,11 +18,11 @@ export type OaicClient = OpenAI;
 
 export type OaicMountOptions = {
     endpoint: string | EndpointPath;
-    handler: RunnerHttpHandler;
+    handler: WorkloadHttpHandler;
 };
 
 export async function createOaicClient(
-    sdk: RunnerSdk,
+    sdk: WorkloadSdk,
     workloadMid: WorkloadMid,
     endpointPath: EndpointPath,
     options: ClientOptions = {},
@@ -37,11 +37,11 @@ export async function createOaicClient(
     return client;
 }
 
-export function mountOaic(sdk: RunnerSdk, options: OaicMountOptions): void {
+export function mountOaic(sdk: WorkloadSdk, options: OaicMountOptions): void {
     sdk.mount(createOaicMount(options));
 }
 
-function createOaicMount(options: OaicMountOptions): RunnerSdkMount {
+function createOaicMount(options: OaicMountOptions): WorkloadSdkMount {
     return {
         protocol: "oaic",
         endpoint: normalizeEndpoint(options.endpoint),

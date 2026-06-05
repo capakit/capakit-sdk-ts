@@ -11,8 +11,8 @@ import type {
     ClientOptions,
     EndpointPath,
     HostedBind,
-    RunnerSdk,
-    RunnerSdkMount,
+    WorkloadSdk,
+    WorkloadSdkMount,
     WorkloadMid,
 } from "./public-types.ts";
 
@@ -29,7 +29,7 @@ export type MountMcpOptions = {
 };
 
 export async function createMcpClient(
-    sdk: RunnerSdk,
+    sdk: WorkloadSdk,
     workloadMid: WorkloadMid,
     endpointPath: EndpointPath,
     options: ClientOptions = {},
@@ -48,11 +48,11 @@ export async function createMcpClient(
     return client;
 }
 
-export function mountMcp(sdk: RunnerSdk, options: MountMcpOptions): void {
+export function mountMcp(sdk: WorkloadSdk, options: MountMcpOptions): void {
     sdk.mount(createMcpMount(options));
 }
 
-function createMcpMount(options: MountMcpOptions): RunnerSdkMount {
+function createMcpMount(options: MountMcpOptions): WorkloadSdkMount {
     const bridge = new HostedMcpBridge();
     bridge.mount(options.server);
     return {
@@ -137,7 +137,7 @@ export class HostedMcpBridge {
 
     mount(server: McpServer): void {
         if (this.mountedServer) {
-            throw new Error("runner SDK already mounted an MCP server");
+            throw new Error("workload SDK already mounted an MCP server");
         }
         this.mountedServer = server;
     }
@@ -145,7 +145,7 @@ export class HostedMcpBridge {
     async start(): Promise<void> {
         const server = this.mountedServer;
         if (!server) {
-            throw new Error("runner SDK requires an MCP server mount before start");
+            throw new Error("workload SDK requires an MCP server mount before start");
         }
         if (this.clientTransport) {
             return;
@@ -159,7 +159,7 @@ export class HostedMcpBridge {
             this.rejectAllPending(error);
         };
         clientTransport.onclose = () => {
-            this.rejectAllPending(new Error("runner MCP bridge closed"));
+            this.rejectAllPending(new Error("workload MCP bridge closed"));
         };
 
         await clientTransport.start();
@@ -170,7 +170,7 @@ export class HostedMcpBridge {
     async stop(): Promise<void> {
         const clientTransport = this.clientTransport;
         this.clientTransport = null;
-        this.rejectAllPending(new Error("runner MCP bridge stopped"));
+        this.rejectAllPending(new Error("workload MCP bridge stopped"));
         if (this.mountedServer?.isConnected()) {
             await this.mountedServer.close();
         }
@@ -279,7 +279,7 @@ export class HostedMcpBridge {
     ): Promise<JSONRPCMessage | null> {
         const transport = this.clientTransport;
         if (!transport) {
-            throw new Error("runner MCP bridge is not started");
+            throw new Error("workload MCP bridge is not started");
         }
 
         if (isResponseMessage(message)) {

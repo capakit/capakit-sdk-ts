@@ -8,24 +8,24 @@ import type {
     HostMount,
     HostedBindValue,
     PresenceId,
-    RunnerProtocol,
+    EndpointProtocol,
     WorkloadMid,
 } from "./public-types.ts";
 import { normalizeMountAccess } from "./mounts.ts";
 
-export const RUNNER_ENV_KEYS = {
+export const WORKLOAD_ENV_KEYS = {
     connectedWorkloads: "CAPAKIT_CONNECTED_WORKLOADS",
-    managedIngressBind: "CAPAKIT_RUNNER_MANAGED_INGRESS_BIND",
-    runnerHostBackend: "CAPAKIT_RUNNER_HOST_BACKEND",
-    runnerHostPid: "CAPAKIT_RUNNER_HOST_PID",
-    runnerBridgeBind: "CAPAKIT_RUNNER_BRIDGE_BIND",
-    runnerSid: "CAPAKIT_RUNNER_SID",
+    workloadIngressBind: "CAPAKIT_WORKLOAD_INGRESS_BIND",
+    workloadHostBackend: "CAPAKIT_WORKLOAD_HOST_BACKEND",
+    workloadHostPid: "CAPAKIT_WORKLOAD_HOST_PID",
+    workloadBridgeBind: "CAPAKIT_WORKLOAD_BRIDGE_BIND",
+    workloadRuntimeSid: "CAPAKIT_WORKLOAD_RUNTIME_SID",
     presenceId: "CAPAKIT_PRESENCE_ID",
     workloadMid: "CAPAKIT_WORKLOAD_MID",
     mounts: "CAPAKIT_MOUNTS_JSON",
 } as const;
 
-export type RunnerHostBackend =
+export type WorkloadHostBackend =
     | "embedded"
     | "mac_os"
     | "mac_os_sandbox"
@@ -35,14 +35,14 @@ export type RunnerHostBackend =
     | "vm"
     | "remote";
 
-export type RunnerEnv = {
+export type WorkloadEnv = {
     connectedWorkloads: HostedWorkloadConnectionConfig[];
     mounts: HostMount[];
-    managedIngressBind: HostedBindValue;
-    runnerHostBackend?: RunnerHostBackend;
-    runnerHostPid?: number;
-    runnerBridgeBind?: HostedBindValue;
-    runnerSid?: string;
+    workloadIngressBind: HostedBindValue;
+    workloadHostBackend?: WorkloadHostBackend;
+    workloadHostPid?: number;
+    workloadBridgeBind?: HostedBindValue;
+    workloadRuntimeSid?: string;
     presenceId?: PresenceId;
     workloadMid?: WorkloadMid;
 };
@@ -50,34 +50,34 @@ export type RunnerEnv = {
 export type HostedWorkloadConnectionConfig = {
     workloadMid: WorkloadMid;
     endpoint: EndpointPath;
-    protocol: RunnerProtocol;
+    protocol: EndpointProtocol;
     bind: HostedBindValue;
 };
 
-export function loadRunnerEnv(env: NodeJS.ProcessEnv = process.env): RunnerEnv {
+export function loadWorkloadEnv(env: NodeJS.ProcessEnv = process.env): WorkloadEnv {
     return {
         connectedWorkloads: loadConnectedWorkloadConfigs(env),
         mounts: loadHostMountConfigs(env),
-        managedIngressBind: requiredEnv(env, RUNNER_ENV_KEYS.managedIngressBind),
-        runnerHostBackend: optionalHostBackend(env[RUNNER_ENV_KEYS.runnerHostBackend]),
-        runnerHostPid: optionalPositiveInt(env[RUNNER_ENV_KEYS.runnerHostPid]),
-        runnerBridgeBind: env[RUNNER_ENV_KEYS.runnerBridgeBind],
-        runnerSid: env[RUNNER_ENV_KEYS.runnerSid],
-        presenceId: optionalPresenceId(env[RUNNER_ENV_KEYS.presenceId]),
-        workloadMid: optionalWorkloadMid(env[RUNNER_ENV_KEYS.workloadMid]),
+        workloadIngressBind: requiredEnv(env, WORKLOAD_ENV_KEYS.workloadIngressBind),
+        workloadHostBackend: optionalHostBackend(env[WORKLOAD_ENV_KEYS.workloadHostBackend]),
+        workloadHostPid: optionalPositiveInt(env[WORKLOAD_ENV_KEYS.workloadHostPid]),
+        workloadBridgeBind: env[WORKLOAD_ENV_KEYS.workloadBridgeBind],
+        workloadRuntimeSid: env[WORKLOAD_ENV_KEYS.workloadRuntimeSid],
+        presenceId: optionalPresenceId(env[WORKLOAD_ENV_KEYS.presenceId]),
+        workloadMid: optionalWorkloadMid(env[WORKLOAD_ENV_KEYS.workloadMid]),
     };
 }
 
 export function loadConnectedWorkloadConfigs(
     env: NodeJS.ProcessEnv = process.env,
 ): HostedWorkloadConnectionConfig[] {
-    const raw = env[RUNNER_ENV_KEYS.connectedWorkloads];
+    const raw = env[WORKLOAD_ENV_KEYS.connectedWorkloads];
     if (!raw) {
         return [];
     }
     const parsed = JSON.parse(raw);
     if (!Array.isArray(parsed)) {
-        throw new Error(`${RUNNER_ENV_KEYS.connectedWorkloads} must be a JSON array`);
+        throw new Error(`${WORKLOAD_ENV_KEYS.connectedWorkloads} must be a JSON array`);
     }
     return parsed.map((value) => normalizeConnectedWorkload(value));
 }
@@ -85,24 +85,24 @@ export function loadConnectedWorkloadConfigs(
 export function loadHostMountConfigs(
     env: NodeJS.ProcessEnv = process.env,
 ): HostMount[] {
-    const raw = env[RUNNER_ENV_KEYS.mounts];
+    const raw = env[WORKLOAD_ENV_KEYS.mounts];
     if (!raw) {
         return [];
     }
     const parsed = JSON.parse(raw);
     if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
-        throw new Error(`${RUNNER_ENV_KEYS.mounts} must be a JSON object`);
+        throw new Error(`${WORKLOAD_ENV_KEYS.mounts} must be a JSON object`);
     }
     return Object.entries(parsed).map(([key, value]) =>
         normalizeHostMountConfig(key, value),
     );
 }
 
-export function requireRunnerBridgeBind(env: RunnerEnv): HostedBindValue {
-    if (!env.runnerBridgeBind) {
-        throw new Error(`${RUNNER_ENV_KEYS.runnerBridgeBind} is required`);
+export function requireWorkloadBridgeBind(env: WorkloadEnv): HostedBindValue {
+    if (!env.workloadBridgeBind) {
+        throw new Error(`${WORKLOAD_ENV_KEYS.workloadBridgeBind} is required`);
     }
-    return env.runnerBridgeBind;
+    return env.workloadBridgeBind;
 }
 
 function normalizeHostMountConfig(key: string, value: unknown): HostMount {
@@ -134,7 +134,7 @@ function normalizeConnectedWorkload(value: unknown): HostedWorkloadConnectionCon
     };
 }
 
-function protocolField(record: Record<string, unknown>): RunnerProtocol {
+function protocolField(record: Record<string, unknown>): EndpointProtocol {
     const protocol = stringField(record, "protocol");
     switch (protocol) {
         case "http":
@@ -143,12 +143,12 @@ function protocolField(record: Record<string, unknown>): RunnerProtocol {
         case "a2a":
             return protocol;
         default:
-            throw new Error(`unsupported runner protocol \`${protocol}\``);
+            throw new Error(`unsupported endpoint protocol \`${protocol}\``);
     }
 }
 
-function optionalHostBackend(value: string | undefined): RunnerHostBackend | undefined {
-    return value as RunnerHostBackend | undefined;
+function optionalHostBackend(value: string | undefined): WorkloadHostBackend | undefined {
+    return value as WorkloadHostBackend | undefined;
 }
 
 function optionalPresenceId(value: string | undefined): PresenceId | undefined {

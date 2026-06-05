@@ -10,7 +10,7 @@ export type EndpointPath = Brand<string, "EndpointPath">;
 export type WorkloadMid = Brand<string, "WorkloadMid">;
 export type SecretMid = Brand<string, "SecretMid">;
 export type HostMountMid = Brand<string, "HostMountMid">;
-export type RunnerProtocol = "http" | "mcp" | "oaic" | "a2a";
+export type EndpointProtocol = "http" | "mcp" | "oaic" | "a2a";
 export type HostMountAccess = "read_only" | "read_write";
 
 export type HostedBind =
@@ -28,27 +28,27 @@ export type ClientOptions = {
     timeoutMs?: number;
 };
 
-export type RunnerWorkloadConnection = {
+export type WorkloadConnection = {
     workloadMid: WorkloadMid;
     endpoint: EndpointPath;
-    protocol: RunnerProtocol;
+    protocol: EndpointProtocol;
 };
 
-export type RunnerWorkloadEndpoint = RunnerWorkloadConnection & {
+export type WorkloadEndpoint = WorkloadConnection & {
     bind: HostedBind;
 };
 
-export type RunnerWorkloads = {
-    readonly workloads: ReadonlyArray<RunnerWorkloadConnection>;
+export type WorkloadConnections = {
+    readonly workloads: ReadonlyArray<WorkloadConnection>;
     endpoint(
         workloadMid: WorkloadMid,
         endpointPath: EndpointPath,
         options?: ClientOptions,
-    ): RunnerWorkloadEndpoint;
+    ): WorkloadEndpoint;
     close(): Promise<void>;
 };
 
-export type RunnerSecrets = {
+export type WorkloadSecrets = {
     resolve(secretMid: SecretMid): Promise<string>;
     close(): Promise<void>;
 };
@@ -59,70 +59,70 @@ export type HostMount = {
     access: HostMountAccess;
 };
 
-export type RunnerMounts = {
+export type HostMounts = {
     get(mountMid: HostMountMid): HostMount | undefined;
     list(): readonly HostMount[];
 };
 
-export type RunnerSdkOptions = {
+export type WorkloadSdkOptions = {
     bind?: HostedBindValue;
-    onPresenceStart?: RunnerPresenceLifecycleHook;
-    onShutdown?: RunnerShutdownHook;
+    onPresenceStart?: WorkloadPresenceLifecycleHook;
+    onShutdown?: WorkloadShutdownHook;
 };
 
-export type RunnerHttpHandlerContext = RunnerPresenceLifecycleContext & {
-    protocol: RunnerProtocol;
+export type WorkloadHttpHandlerContext = WorkloadPresenceLifecycleContext & {
+    protocol: EndpointProtocol;
     endpoint: EndpointPath;
 };
 
-export type RunnerHttpHandler = (
+export type WorkloadHttpHandler = (
     request: Request,
-    context: RunnerHttpHandlerContext,
+    context: WorkloadHttpHandlerContext,
 ) => Response | Promise<Response>;
 
-export type RunnerHttpMount = {
+export type WorkloadHttpMount = {
     protocol: "http";
     endpoint: EndpointPath;
-    handler: RunnerHttpHandler;
+    handler: WorkloadHttpHandler;
 };
 
-export type RunnerSdkMount = {
-    protocol: RunnerProtocol;
+export type WorkloadSdkMount = {
+    protocol: EndpointProtocol;
     endpoint: EndpointPath;
-    handler: RunnerHttpHandler;
+    handler: WorkloadHttpHandler;
     start?: () => Promise<void>;
     stop?: () => Promise<void>;
 };
 
-export type RunnerSignal = "SIGINT" | "SIGTERM";
+export type ShutdownSignal = "SIGINT" | "SIGTERM";
 
-export type RunnerPresenceLifecycleContext = {
+export type WorkloadPresenceLifecycleContext = {
     presenceId?: PresenceId;
     workloadMid?: WorkloadMid;
 };
 
-export type RunnerShutdownCause =
-    | { kind: "signal"; signal: RunnerSignal }
+export type WorkloadShutdownCause =
+    | { kind: "signal"; signal: ShutdownSignal }
     | { kind: "orphaned"; initialParentPid: number }
     | { kind: "stop" };
 
-export type RunnerShutdownContext = RunnerPresenceLifecycleContext & {
-    cause: RunnerShutdownCause;
+export type WorkloadShutdownContext = WorkloadPresenceLifecycleContext & {
+    cause: WorkloadShutdownCause;
 };
 
-export type RunnerPresenceLifecycleHook = (
-    context: RunnerPresenceLifecycleContext,
+export type WorkloadPresenceLifecycleHook = (
+    context: WorkloadPresenceLifecycleContext,
 ) => void | Promise<void>;
 
-export type RunnerShutdownHook = (
-    context: RunnerShutdownContext,
+export type WorkloadShutdownHook = (
+    context: WorkloadShutdownContext,
 ) => void | Promise<void>;
 
-export type RunnerSdk = {
-    readonly workloads: RunnerWorkloads;
-    readonly secrets: RunnerSecrets;
-    readonly mounts: RunnerMounts;
-    mount(mount: RunnerSdkMount): void;
+export type WorkloadSdk = {
+    readonly workloads: WorkloadConnections;
+    readonly secrets: WorkloadSecrets;
+    readonly mounts: HostMounts;
+    mount(mount: WorkloadSdkMount): void;
     hijackConsoleLogging(): () => void;
     start(): Promise<void>;
     stop(): Promise<void>;

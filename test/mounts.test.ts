@@ -1,11 +1,11 @@
 import { describe, expect, test } from "vitest";
 
-import { RunnerMountsImpl } from "../src/mounts.ts";
+import { HostMountsImpl } from "../src/mounts.ts";
 import { hostMountMid } from "../src/ids.ts";
 
-describe("RunnerMountsImpl", () => {
+describe("HostMountsImpl", () => {
     test("gets and lists configured host mounts", () => {
-        const mounts = new RunnerMountsImpl({
+        const mounts = new HostMountsImpl({
             connectedWorkloads: [],
             mounts: [
                 {
@@ -14,7 +14,7 @@ describe("RunnerMountsImpl", () => {
                     access: "read_only",
                 },
             ],
-            managedIngressBind: "tcp:127.0.0.1:4100",
+            workloadIngressBind: "tcp:127.0.0.1:4100",
         });
 
         expect(mounts.get(hostMountMid("docs"))).toEqual({

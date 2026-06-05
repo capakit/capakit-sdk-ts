@@ -3,9 +3,9 @@ import type { IncomingMessage, Server, ServerResponse } from "node:http";
 import type { AddressInfo } from "node:net";
 import { afterEach, describe, expect, test } from "vitest";
 
-import { RunnerBridgeClient } from "../src/rpc.ts";
+import { WorkloadBridgeClient } from "../src/rpc.ts";
 
-const BRIDGE_CONTENT_TYPE = "application/x-capakit-runner-bridge-jsonl";
+const BRIDGE_CONTENT_TYPE = "application/x-capakit-workload-bridge-jsonl";
 
 const servers: BridgeServer[] = [];
 
@@ -13,14 +13,14 @@ afterEach(async () => {
     await Promise.all(servers.splice(0).map((server) => closeBridgeServer(server)));
 });
 
-describe("RunnerBridgeClient", () => {
+describe("WorkloadBridgeClient", () => {
     test("sends JSONL requests and resolves ok responses", async () => {
         const server = await listenBridge(async (request, response) => {
             expect(request.op).toBe("resolve_secret");
             expect(request.params).toEqual({ secret_mid: "secret:api_key" });
             writeBridgeResponse(response, { id: request.id, ok: { value: "secret-value" } });
         });
-        const client = new RunnerBridgeClient(server.bind);
+        const client = new WorkloadBridgeClient(server.bind);
 
         await expect(client.call("resolve_secret", {
             secret_mid: "secret:api_key",
@@ -40,7 +40,7 @@ describe("RunnerBridgeClient", () => {
                 },
             });
         });
-        const client = new RunnerBridgeClient(server.bind);
+        const client = new WorkloadBridgeClient(server.bind);
 
         await expect(client.call("resolve_secret", {
             secret_mid: "secret:missing",
@@ -54,7 +54,7 @@ describe("RunnerBridgeClient", () => {
             response.writeHead(404);
             response.end();
         });
-        const client = new RunnerBridgeClient(server.bind);
+        const client = new WorkloadBridgeClient(server.bind);
 
         await expect(client.call("ping", {})).rejects.toThrow(/status 404/);
         await client.close();
@@ -65,7 +65,7 @@ describe("RunnerBridgeClient", () => {
             response.writeHead(200, { "content-type": BRIDGE_CONTENT_TYPE });
             response.end(encodeFrame({ ok: "missing-id" }));
         });
-        const client = new RunnerBridgeClient(server.bind);
+        const client = new WorkloadBridgeClient(server.bind);
 
         await expect(client.call("ping", {})).rejects.toThrow(/missing string id/);
         await client.close();

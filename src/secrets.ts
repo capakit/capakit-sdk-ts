@@ -1,20 +1,20 @@
 import type {
-    RunnerSecrets,
+    WorkloadSecrets,
     SecretMid,
 } from "./public-types.ts";
-import type { RunnerEnv } from "./runner-env.ts";
-import { requireRunnerBridgeBind } from "./runner-env.ts";
-import { RunnerBridgeClient } from "./rpc.ts";
+import type { WorkloadEnv } from "./workload-env.ts";
+import { requireWorkloadBridgeBind } from "./workload-env.ts";
+import { WorkloadBridgeClient } from "./rpc.ts";
 
 type ResolveSecretResult = {
     value: string;
 };
 
-export class RunnerSecretsImpl implements RunnerSecrets {
-    private readonly rpc: RunnerBridgeClient;
+export class WorkloadSecretsImpl implements WorkloadSecrets {
+    private readonly rpc: WorkloadBridgeClient;
 
-    constructor(env: RunnerEnv) {
-        this.rpc = new RunnerBridgeClient(requireRunnerBridgeBind(env));
+    constructor(env: WorkloadEnv) {
+        this.rpc = new WorkloadBridgeClient(requireWorkloadBridgeBind(env));
     }
 
     async resolve(secretMid: SecretMid): Promise<string> {

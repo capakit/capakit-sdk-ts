@@ -3,15 +3,15 @@ import { describe, expect, test } from "vitest";
 import {
     loadConnectedWorkloadConfigs,
     loadHostMountConfigs,
-    loadRunnerEnv,
-    requireRunnerBridgeBind,
-    RUNNER_ENV_KEYS,
-} from "../src/runner-env.ts";
+    loadWorkloadEnv,
+    requireWorkloadBridgeBind,
+    WORKLOAD_ENV_KEYS,
+} from "../src/workload-env.ts";
 
-describe("loadRunnerEnv", () => {
+describe("loadWorkloadEnv", () => {
     test("loads required bind, optional identity, and connected workloads", () => {
-        const env = loadRunnerEnv({
-            [RUNNER_ENV_KEYS.connectedWorkloads]: JSON.stringify([
+        const env = loadWorkloadEnv({
+            [WORKLOAD_ENV_KEYS.connectedWorkloads]: JSON.stringify([
                 {
                     workloadMid: "mid:capability/workload",
                     endpoint: "chat",
@@ -19,12 +19,12 @@ describe("loadRunnerEnv", () => {
                     bind: "tcp:127.0.0.1:4100",
                 },
             ]),
-            [RUNNER_ENV_KEYS.managedIngressBind]: "unix:/tmp/capakit.sock",
-            [RUNNER_ENV_KEYS.runnerBridgeBind]: "tcp:127.0.0.1:4200",
-            [RUNNER_ENV_KEYS.runnerSid]: "sid:runner/dev",
-            [RUNNER_ENV_KEYS.presenceId]: "presence-1",
-            [RUNNER_ENV_KEYS.workloadMid]: "mid:self/workload",
-            [RUNNER_ENV_KEYS.mounts]: JSON.stringify({
+            [WORKLOAD_ENV_KEYS.workloadIngressBind]: "unix:/tmp/capakit.sock",
+            [WORKLOAD_ENV_KEYS.workloadBridgeBind]: "tcp:127.0.0.1:4200",
+            [WORKLOAD_ENV_KEYS.workloadRuntimeSid]: "sid:runner/dev",
+            [WORKLOAD_ENV_KEYS.presenceId]: "presence-1",
+            [WORKLOAD_ENV_KEYS.workloadMid]: "mid:self/workload",
+            [WORKLOAD_ENV_KEYS.mounts]: JSON.stringify({
                 docs: {
                     mid: "docs",
                     path: "/Users/me/docs",
@@ -33,9 +33,9 @@ describe("loadRunnerEnv", () => {
             }),
         });
 
-        expect(env.managedIngressBind).toBe("unix:/tmp/capakit.sock");
-        expect(env.runnerBridgeBind).toBe("tcp:127.0.0.1:4200");
-        expect(env.runnerSid).toBe("sid:runner/dev");
+        expect(env.workloadIngressBind).toBe("unix:/tmp/capakit.sock");
+        expect(env.workloadBridgeBind).toBe("tcp:127.0.0.1:4200");
+        expect(env.workloadRuntimeSid).toBe("sid:runner/dev");
         expect(env.presenceId).toBe("presence-1");
         expect(env.workloadMid).toBe("mid:self/workload");
         expect(env.mounts).toEqual([
@@ -56,7 +56,7 @@ describe("loadRunnerEnv", () => {
     });
 
     test("requires managed ingress bind", () => {
-        expect(() => loadRunnerEnv({})).toThrow(/CAPAKIT_RUNNER_MANAGED_INGRESS_BIND/);
+        expect(() => loadWorkloadEnv({})).toThrow(/CAPAKIT_WORKLOAD_INGRESS_BIND/);
     });
 });
 
@@ -67,7 +67,7 @@ describe("loadHostMountConfigs", () => {
 
     test("loads host mount configs", () => {
         expect(loadHostMountConfigs({
-            [RUNNER_ENV_KEYS.mounts]: JSON.stringify({
+            [WORKLOAD_ENV_KEYS.mounts]: JSON.stringify({
                 docs: {
                     mid: "docs",
                     path: "/Users/me/docs",
@@ -85,7 +85,7 @@ describe("loadHostMountConfigs", () => {
 
     test("rejects unsupported access modes", () => {
         expect(() => loadHostMountConfigs({
-            [RUNNER_ENV_KEYS.mounts]: JSON.stringify({
+            [WORKLOAD_ENV_KEYS.mounts]: JSON.stringify({
                 docs: {
                     mid: "docs",
                     path: "/Users/me/docs",
@@ -103,7 +103,7 @@ describe("loadConnectedWorkloadConfigs", () => {
 
     test("rejects unsupported protocols", () => {
         expect(() => loadConnectedWorkloadConfigs({
-            [RUNNER_ENV_KEYS.connectedWorkloads]: JSON.stringify([
+            [WORKLOAD_ENV_KEYS.connectedWorkloads]: JSON.stringify([
                 {
                     workloadMid: "mid:capability/workload",
                     endpoint: "/chat",
@@ -111,25 +111,25 @@ describe("loadConnectedWorkloadConfigs", () => {
                     bind: "tcp:127.0.0.1:4100",
                 },
             ]),
-        })).toThrow(/unsupported runner protocol/);
+        })).toThrow(/unsupported endpoint protocol/);
     });
 });
 
-describe("requireRunnerBridgeBind", () => {
+describe("requireWorkloadBridgeBind", () => {
     test("returns configured bridge bind", () => {
-        expect(requireRunnerBridgeBind({
+        expect(requireWorkloadBridgeBind({
             connectedWorkloads: [],
             mounts: [],
-            managedIngressBind: "tcp:127.0.0.1:4100",
-            runnerBridgeBind: "tcp:127.0.0.1:4200",
+            workloadIngressBind: "tcp:127.0.0.1:4100",
+            workloadBridgeBind: "tcp:127.0.0.1:4200",
         })).toBe("tcp:127.0.0.1:4200");
     });
 
     test("rejects missing bridge bind", () => {
-        expect(() => requireRunnerBridgeBind({
+        expect(() => requireWorkloadBridgeBind({
             connectedWorkloads: [],
             mounts: [],
-            managedIngressBind: "tcp:127.0.0.1:4100",
-        })).toThrow(/CAPAKIT_RUNNER_BRIDGE_BIND/);
+            workloadIngressBind: "tcp:127.0.0.1:4100",
+        })).toThrow(/CAPAKIT_WORKLOAD_BRIDGE_BIND/);
     });
 });

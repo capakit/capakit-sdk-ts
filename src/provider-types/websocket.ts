@@ -1,8 +1,8 @@
-import type { RunnerSdk, ClientOptions, EndpointPath, WorkloadMid } from "../public-types.ts";
+import type { WorkloadSdk, ClientOptions, EndpointPath, WorkloadMid } from "../public-types.ts";
 
 export type WebSocketClient = import("ws").default;
 export declare function connectWebSocket(
-    sdk: RunnerSdk,
+    sdk: WorkloadSdk,
     workloadMid: WorkloadMid,
     endpointPath: EndpointPath,
     options?: ClientOptions,

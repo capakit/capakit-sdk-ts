@@ -1,5 +1,5 @@
 import { endpointPath } from "./ids.ts";
-import type { EndpointPath, RunnerSdk } from "./public-types.ts";
+import type { EndpointPath, WorkloadSdk } from "./public-types.ts";
 
 export type TestCaseResponseJson = unknown;
 
@@ -24,7 +24,7 @@ export type MountTestsOptions = {
     tests: Record<string, TestHttpCase>;
 };
 
-export function mountTests(sdk: RunnerSdk, options: MountTestsOptions): void {
+export function mountTests(sdk: WorkloadSdk, options: MountTestsOptions): void {
     const endpoint = normalizeEndpoint(options.endpoint ?? "/test");
     sdk.mount({
         protocol: "http",

@@ -1,4 +1,4 @@
-import type { EndpointPath, RunnerSdk } from "../public-types.ts";
+import type { EndpointPath, WorkloadSdk } from "../public-types.ts";
 
 export type TestCaseResponseJson = unknown;
 
@@ -24,6 +24,6 @@ export type MountTestsOptions = {
 };
 
 export declare function mountTests(
-    sdk: RunnerSdk,
+    sdk: WorkloadSdk,
     options: MountTestsOptions,
 ): void;

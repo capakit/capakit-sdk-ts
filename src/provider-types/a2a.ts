@@ -1,4 +1,4 @@
-import type { RunnerSdk, ClientOptions, EndpointPath, WorkloadMid } from "../public-types.ts";
+import type { WorkloadSdk, ClientOptions, EndpointPath, WorkloadMid } from "../public-types.ts";
 
 export type A2aAgentCard = import("@a2a-js/sdk").AgentCard;
 export type A2aAgentExecutor = import("@a2a-js/sdk/server").AgentExecutor;
@@ -11,9 +11,9 @@ export type A2aMountOptions = {
     taskStore?: A2aTaskStore;
 };
 export declare function createA2aClient(
-    sdk: RunnerSdk,
+    sdk: WorkloadSdk,
     workloadMid: WorkloadMid,
     endpointPath: EndpointPath,
     options?: ClientOptions,
 ): Promise<A2aClient>;
-export declare function mountA2a(sdk: RunnerSdk, options: A2aMountOptions): void;
+export declare function mountA2a(sdk: WorkloadSdk, options: A2aMountOptions): void;

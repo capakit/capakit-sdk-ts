@@ -1,7 +1,7 @@
 import type {
     ClientOptions,
     EndpointPath,
-    RunnerSdk,
+    WorkloadSdk,
     WorkloadMid,
 } from "./public-types.ts";
 import { registerSdkClientCleanup } from "./client-lifecycle.ts";
@@ -24,7 +24,7 @@ type GoogleAiStudioFetchPatch = {
 let fetchPatch: GoogleAiStudioFetchPatch | undefined;
 
 export async function createGoogleAiStudioClient(
-    sdk: RunnerSdk,
+    sdk: WorkloadSdk,
     workloadMid: WorkloadMid,
     endpointPath: EndpointPath,
     options: ClientOptions = {},

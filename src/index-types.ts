@@ -5,6 +5,6 @@ export {
     secretMid,
     workloadMid,
 } from "./public-types.ts";
-import type { RunnerSdk, RunnerSdkOptions } from "./public-types.ts";
+import type { WorkloadSdk, WorkloadSdkOptions } from "./public-types.ts";
 
-export declare function createRunnerSdk(options?: RunnerSdkOptions): RunnerSdk;
+export declare function createWorkloadSdk(options?: WorkloadSdkOptions): WorkloadSdk;

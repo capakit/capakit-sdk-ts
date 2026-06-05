@@ -3,19 +3,19 @@ import type { AddressInfo } from "node:net";
 import { describe, expect, test } from "vitest";
 
 import {
-    RUNNER_SDK_CLIENT_LIFECYCLE,
-    type RunnerSdkClientCleanup,
+    WORKLOAD_SDK_CLIENT_LIFECYCLE,
+    type WorkloadSdkClientCleanup,
 } from "../src/client-lifecycle.ts";
 import { endpointPath, workloadMid } from "../src/ids.ts";
 import { createGoogleAiStudioClient } from "../src/google-ai-studio.ts";
 import type {
     EndpointPath,
     HostedBind,
-    RunnerMounts,
-    RunnerSdk,
-    RunnerSdkMount,
-    RunnerSecrets,
-    RunnerWorkloads,
+    HostMounts,
+    WorkloadSdk,
+    WorkloadSdkMount,
+    WorkloadSecrets,
+    WorkloadConnections,
 } from "../src/public-types.ts";
 import {
     closeServer,
@@ -56,7 +56,7 @@ describe("createGoogleAiStudioClient", () => {
             });
         });
         await listen(server, { kind: "tcp", host: "127.0.0.1", port: nextPort() });
-        const sdk = new TestRunnerSdk(tcpBind(server), endpointPath("/google"));
+        const sdk = new TestWorkloadSdk(tcpBind(server), endpointPath("/google"));
 
         try {
             const client = await createGoogleAiStudioClient(
@@ -90,11 +90,11 @@ describe("createGoogleAiStudioClient", () => {
 
     test("keeps the fetch patch active until the last route is cleaned up", async () => {
         const originalFetch = globalThis.fetch;
-        const first = new TestRunnerSdk(
+        const first = new TestWorkloadSdk(
             { kind: "tcp", host: "127.0.0.1", port: 1 },
             endpointPath("/google-a"),
         );
-        const second = new TestRunnerSdk(
+        const second = new TestWorkloadSdk(
             { kind: "tcp", host: "127.0.0.1", port: 2 },
             endpointPath("/google-b"),
         );
@@ -127,20 +127,20 @@ describe("createGoogleAiStudioClient", () => {
     });
 });
 
-class TestRunnerSdk implements RunnerSdk {
-    readonly workloads: RunnerWorkloads;
-    readonly secrets: RunnerSecrets = {
+class TestWorkloadSdk implements WorkloadSdk {
+    readonly workloads: WorkloadConnections;
+    readonly secrets: WorkloadSecrets = {
         resolve: async () => {
             throw new Error("secrets are not used by this test");
         },
         close: async () => {},
     };
-    readonly mounts: RunnerMounts = {
+    readonly mounts: HostMounts = {
         get: () => undefined,
         list: () => [],
     };
 
-    private readonly cleanups = new Set<RunnerSdkClientCleanup>();
+    private readonly cleanups = new Set<WorkloadSdkClientCleanup>();
 
     constructor(
         private readonly bind: HostedBind,
@@ -158,7 +158,7 @@ class TestRunnerSdk implements RunnerSdk {
         };
     }
 
-    mount(_mount: RunnerSdkMount): void {}
+    mount(_mount: WorkloadSdkMount): void {}
 
     hijackConsoleLogging(): () => void {
         return () => {};
@@ -172,7 +172,7 @@ class TestRunnerSdk implements RunnerSdk {
         await Promise.all(cleanups.map((cleanup) => cleanup()));
     }
 
-    [RUNNER_SDK_CLIENT_LIFECYCLE](cleanup: RunnerSdkClientCleanup): void {
+    [WORKLOAD_SDK_CLIENT_LIFECYCLE](cleanup: WorkloadSdkClientCleanup): void {
         this.cleanups.add(cleanup);
     }
 }

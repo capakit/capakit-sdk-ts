@@ -9,7 +9,7 @@ import type {
     ClientOptions,
     EndpointPath,
     HostedBind,
-    RunnerSdk,
+    WorkloadSdk,
     WorkloadMid,
 } from "./public-types.ts";
 import { registerSdkClientCleanup } from "./client-lifecycle.ts";
@@ -47,7 +47,7 @@ type RawWebSocketConstructor = {
 export type WebSocketClient = WebSocket;
 
 export async function connectWebSocket(
-    sdk: RunnerSdk,
+    sdk: WorkloadSdk,
     workloadMid: WorkloadMid,
     endpointPath: EndpointPath,
     options: ClientOptions = {},

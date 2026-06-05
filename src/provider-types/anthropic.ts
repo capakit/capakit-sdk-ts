@@ -1,8 +1,8 @@
-import type { RunnerSdk, ClientOptions, EndpointPath, WorkloadMid } from "../public-types.ts";
+import type { WorkloadSdk, ClientOptions, EndpointPath, WorkloadMid } from "../public-types.ts";
 
 export type AnthropicClient = import("@anthropic-ai/sdk").default;
 export declare function createAnthropicClient(
-    sdk: RunnerSdk,
+    sdk: WorkloadSdk,
     workloadMid: WorkloadMid,
     endpointPath: EndpointPath,
     options?: ClientOptions,

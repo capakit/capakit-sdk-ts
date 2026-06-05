@@ -2,19 +2,19 @@ import { endpointPath } from "./ids.ts";
 import type {
     ClientOptions,
     EndpointPath,
-    RunnerWorkloadConnection,
-    RunnerWorkloadEndpoint,
-    RunnerWorkloads,
+    WorkloadConnection,
+    WorkloadEndpoint,
+    WorkloadConnections,
     WorkloadMid,
 } from "./public-types.ts";
-import type { HostedWorkloadConnectionConfig, RunnerEnv } from "./runner-env.ts";
+import type { HostedWorkloadConnectionConfig, WorkloadEnv } from "./workload-env.ts";
 import { parseBind } from "./transport.ts";
 
-export class RunnerWorkloadsImpl implements RunnerWorkloads {
-    readonly workloads: ReadonlyArray<RunnerWorkloadConnection>;
+export class WorkloadConnectionsImpl implements WorkloadConnections {
+    readonly workloads: ReadonlyArray<WorkloadConnection>;
 
     private readonly connections: ReadonlyMap<string, HostedWorkloadConnectionConfig>;
-    constructor(env: RunnerEnv) {
+    constructor(env: WorkloadEnv) {
         this.connections = new Map(
             env.connectedWorkloads.map((config) => [
                 connectionKey(config.workloadMid, config.endpoint),
@@ -28,7 +28,7 @@ export class RunnerWorkloadsImpl implements RunnerWorkloads {
         workloadMidValue: WorkloadMid,
         endpointPathValue: EndpointPath,
         options: ClientOptions = {},
-    ): RunnerWorkloadEndpoint {
+    ): WorkloadEndpoint {
         if (options.signal?.aborted) {
             throw new Error(`workload endpoint request aborted for workload \`${workloadMidValue}\``);
         }

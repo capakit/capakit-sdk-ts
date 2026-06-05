@@ -3,29 +3,29 @@ import { execFileSync } from "node:child_process";
 import type { Server as HttpServer } from "node:http";
 
 import {
-    RUNNER_SDK_CLIENT_LIFECYCLE,
-    type RunnerSdkClientCleanup,
+    WORKLOAD_SDK_CLIENT_LIFECYCLE,
+    type WorkloadSdkClientCleanup,
 } from "./client-lifecycle.ts";
 import { installHostConsoleLogging } from "./logging.ts";
-import { RunnerMountsImpl } from "./mounts.ts";
-import { RunnerSecretsImpl } from "./secrets.ts";
+import { HostMountsImpl } from "./mounts.ts";
+import { WorkloadSecretsImpl } from "./secrets.ts";
 import type {
     EndpointPath,
     HostedBind,
-    RunnerPresenceLifecycleContext,
-    RunnerPresenceLifecycleHook,
-    RunnerSdk,
-    RunnerSdkMount,
-    RunnerSdkOptions,
-    RunnerShutdownHook,
-    RunnerShutdownCause,
-    RunnerSignal,
-    RunnerMounts,
-    RunnerWorkloads,
-    RunnerSecrets,
+    WorkloadPresenceLifecycleContext,
+    WorkloadPresenceLifecycleHook,
+    WorkloadSdk,
+    WorkloadSdkMount,
+    WorkloadSdkOptions,
+    WorkloadShutdownHook,
+    WorkloadShutdownCause,
+    ShutdownSignal,
+    HostMounts,
+    WorkloadConnections,
+    WorkloadSecrets,
 } from "./public-types.ts";
-import { loadRunnerEnv } from "./runner-env.ts";
-import type { RunnerEnv } from "./runner-env.ts";
+import { loadWorkloadEnv } from "./workload-env.ts";
+import type { WorkloadEnv } from "./workload-env.ts";
 import {
     closeServer,
     createHostedServer,
@@ -33,7 +33,7 @@ import {
     parseBind,
     removeSocket,
 } from "./transport.ts";
-import { RunnerWorkloadsImpl } from "./workloads.ts";
+import { WorkloadConnectionsImpl } from "./workloads.ts";
 
 export type * from "./public-types.ts";
 export {
@@ -50,19 +50,19 @@ type MountedHttpTransport = {
     handleRequest: (request: Request) => Promise<Response>;
 };
 
-class HostedRunnerSdk implements RunnerSdk {
-    readonly workloads: RunnerWorkloads;
-    readonly secrets: RunnerSecrets;
-    readonly mounts: RunnerMounts;
+class HostedWorkloadSdk implements WorkloadSdk {
+    readonly workloads: WorkloadConnections;
+    readonly secrets: WorkloadSecrets;
+    readonly mounts: HostMounts;
 
     private readonly bind: HostedBind;
-    private readonly env: RunnerEnv;
+    private readonly env: WorkloadEnv;
     private readonly initialParentPid: number;
-    private readonly runnerHostPid?: number;
-    private readonly onPresenceStart?: RunnerPresenceLifecycleHook;
-    private readonly onShutdown?: RunnerShutdownHook;
+    private readonly workloadHostPid?: number;
+    private readonly onPresenceStart?: WorkloadPresenceLifecycleHook;
+    private readonly onShutdown?: WorkloadShutdownHook;
     private readonly mountedTransports = new Map<string, MountedHttpTransport>();
-    private readonly clientCleanups = new Set<RunnerSdkClientCleanup>();
+    private readonly clientCleanups = new Set<WorkloadSdkClientCleanup>();
     private server: HttpServer | null = null;
     private stopPromise: Promise<void> | null = null;
     private parentMonitor?: ReturnType<typeof setInterval>;
@@ -71,32 +71,32 @@ class HostedRunnerSdk implements RunnerSdk {
     private sigtermHandler?: () => void;
     private restoreConsoleLogging?: () => void;
 
-    constructor(options: RunnerSdkOptions = {}) {
-        this.env = loadRunnerEnv();
+    constructor(options: WorkloadSdkOptions = {}) {
+        this.env = loadWorkloadEnv();
         this.initialParentPid = currentParentPid();
-        this.runnerHostPid = this.env.runnerHostPid;
-        this.bind = parseBind(options.bind ?? this.env.managedIngressBind);
+        this.workloadHostPid = this.env.workloadHostPid;
+        this.bind = parseBind(options.bind ?? this.env.workloadIngressBind);
         this.onPresenceStart = options.onPresenceStart;
         this.onShutdown = options.onShutdown;
-        this.workloads = new RunnerWorkloadsImpl(this.env);
-        this.secrets = new RunnerSecretsImpl(this.env);
-        this.mounts = new RunnerMountsImpl(this.env);
+        this.workloads = new WorkloadConnectionsImpl(this.env);
+        this.secrets = new WorkloadSecretsImpl(this.env);
+        this.mounts = new HostMountsImpl(this.env);
     }
 
-    mount(mount: RunnerSdkMount): void {
+    mount(mount: WorkloadSdkMount): void {
         switch (mount.protocol) {
             case "http":
             case "oaic":
             case "mcp":
             case "a2a":
                 this.mountHttpTransport(
-                    this.runnerHttpHandlerTransport(mount),
+                    this.workloadHttpHandlerTransport(mount),
                 );
                 return;
         }
     }
 
-    [RUNNER_SDK_CLIENT_LIFECYCLE](cleanup: RunnerSdkClientCleanup): void {
+    [WORKLOAD_SDK_CLIENT_LIFECYCLE](cleanup: WorkloadSdkClientCleanup): void {
         this.clientCleanups.add(cleanup);
     }
 
@@ -134,7 +134,7 @@ class HostedRunnerSdk implements RunnerSdk {
         return this.stopWithCause({ kind: "stop" });
     }
 
-    private async stopWithCause(cause: RunnerShutdownCause): Promise<void> {
+    private async stopWithCause(cause: WorkloadShutdownCause): Promise<void> {
         if (this.stopPromise) {
             return this.stopPromise;
         }
@@ -144,7 +144,7 @@ class HostedRunnerSdk implements RunnerSdk {
         return this.stopPromise;
     }
 
-    private async stopInner(cause: RunnerShutdownCause): Promise<void> {
+    private async stopInner(cause: WorkloadShutdownCause): Promise<void> {
         this.removeSignalHandlers();
         this.removeParentMonitor();
         let hookError: unknown;
@@ -187,7 +187,7 @@ class HostedRunnerSdk implements RunnerSdk {
         await Promise.all(cleanups.map((cleanup) => cleanup()));
     }
 
-    private lifecycleContext(): RunnerPresenceLifecycleContext {
+    private lifecycleContext(): WorkloadPresenceLifecycleContext {
         return {
             presenceId: this.env.presenceId,
             workloadMid: this.env.workloadMid,
@@ -227,7 +227,7 @@ class HostedRunnerSdk implements RunnerSdk {
             return;
         }
         this.parentMonitor = setInterval(() => {
-            if (this.runnerHostPid && !processExists(this.runnerHostPid)) {
+            if (this.workloadHostPid && !processExists(this.workloadHostPid)) {
                 void this.handleParentExit();
                 return;
             }
@@ -279,7 +279,7 @@ class HostedRunnerSdk implements RunnerSdk {
         this.orphanExitTimer = undefined;
     }
 
-    private async handleSignal(signal: RunnerSignal): Promise<void> {
+    private async handleSignal(signal: ShutdownSignal): Promise<void> {
         try {
             await this.stopWithCause({
                 kind: "signal",
@@ -326,12 +326,12 @@ class HostedRunnerSdk implements RunnerSdk {
 
     private mountHttpTransport(transport: MountedHttpTransport): void {
         if (this.mountedTransports.has(transport.endpoint)) {
-            throw new Error(`runner SDK endpoint \`${transport.endpoint}\` is already mounted`);
+            throw new Error(`workload SDK endpoint \`${transport.endpoint}\` is already mounted`);
         }
         this.mountedTransports.set(transport.endpoint, transport);
     }
 
-    private runnerHttpHandlerTransport(mount: RunnerSdkMount): MountedHttpTransport {
+    private workloadHttpHandlerTransport(mount: WorkloadSdkMount): MountedHttpTransport {
         return {
             endpoint: mount.endpoint,
             start: mount.start,
@@ -357,8 +357,8 @@ class HostedRunnerSdk implements RunnerSdk {
     }
 }
 
-export function createRunnerSdk(options: RunnerSdkOptions = {}): RunnerSdk {
-    return new HostedRunnerSdk(options);
+export function createWorkloadSdk(options: WorkloadSdkOptions = {}): WorkloadSdk {
+    return new HostedWorkloadSdk(options);
 }
 
 function currentParentPid(): number {

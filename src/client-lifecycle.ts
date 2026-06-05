@@ -1,24 +1,24 @@
-import type { RunnerSdk } from "./public-types.ts";
+import type { WorkloadSdk } from "./public-types.ts";
 
-export type RunnerSdkClientCleanup = () => Promise<void> | void;
+export type WorkloadSdkClientCleanup = () => Promise<void> | void;
 
-export const RUNNER_SDK_CLIENT_LIFECYCLE = Symbol.for(
+export const WORKLOAD_SDK_CLIENT_LIFECYCLE = Symbol.for(
     "@capakit/sdk/client-lifecycle",
 );
 
-type RunnerSdkClientLifecycle = {
-    [RUNNER_SDK_CLIENT_LIFECYCLE](cleanup: RunnerSdkClientCleanup): void;
+type WorkloadSdkClientLifecycle = {
+    [WORKLOAD_SDK_CLIENT_LIFECYCLE](cleanup: WorkloadSdkClientCleanup): void;
 };
 
 export function registerSdkClientCleanup(
-    sdk: RunnerSdk,
-    cleanup: RunnerSdkClientCleanup,
+    sdk: WorkloadSdk,
+    cleanup: WorkloadSdkClientCleanup,
 ): void {
-    const lifecycle = sdk as RunnerSdk & Partial<RunnerSdkClientLifecycle>;
-    lifecycle[RUNNER_SDK_CLIENT_LIFECYCLE]?.(cleanup);
+    const lifecycle = sdk as WorkloadSdk & Partial<WorkloadSdkClientLifecycle>;
+    lifecycle[WORKLOAD_SDK_CLIENT_LIFECYCLE]?.(cleanup);
 }
 
-export function registerSdkCloseableClient(sdk: RunnerSdk, client: unknown): void {
+export function registerSdkCloseableClient(sdk: WorkloadSdk, client: unknown): void {
     if (typeof client !== "object" || client === null) {
         return;
     }
