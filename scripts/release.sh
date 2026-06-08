@@ -12,7 +12,7 @@ large  Bump major version and reset minor/patch.
 The script:
   - requires a clean working tree
   - fetches origin/main, origin/dev, and tags
-  - promotes the latest dev release tag to main with a fast-forward merge
+  - promotes the latest dev release tag to main, fast-forwarding when possible
   - runs npm checks
   - updates package.json and package-lock.json
   - commits, creates vX.Y.Z, and pushes main + tag
@@ -77,6 +77,20 @@ if ! git ls-remote --exit-code --tags origin "refs/tags/$dev_tag" >/dev/null; th
   echo "dev tag $dev_tag has not been pushed to origin" >&2
   exit 1
 fi
+if git rev-parse -q --verify refs/remotes/origin/dev >/dev/null; then
+  if ! git merge-base --is-ancestor refs/remotes/origin/dev "$dev_tag"; then
+    echo "latest dev tag is behind origin/dev: $dev_tag" >&2
+    echo "Run scripts/dev-release.sh first, or pass --dev-tag for the exact dev build to promote." >&2
+    exit 1
+  fi
+fi
+if git rev-parse -q --verify refs/heads/dev >/dev/null; then
+  if ! git merge-base --is-ancestor refs/heads/dev "$dev_tag"; then
+    echo "latest dev tag is behind local dev: $dev_tag" >&2
+    echo "Run scripts/dev-release.sh first, or pass --dev-tag for the exact dev build to promote." >&2
+    exit 1
+  fi
+fi
 
 git switch main
 git pull --ff-only origin main
@@ -84,9 +98,9 @@ last_tag="$(
   git tag --list 'v[0-9]*.[0-9]*.[0-9]*' --sort=-v:refname \
     | head -n 1
 )"
+dev_version="${dev_tag#dev/v}"
+dev_base_version="${dev_version%%-*}"
 if git merge-base --is-ancestor "$dev_tag" HEAD; then
-  dev_version="${dev_tag#dev/v}"
-  dev_base_version="${dev_version%%-*}"
   latest_prod_version="${last_tag#v}"
   latest_prod_covers_dev="$(
     node - "$latest_prod_version" "$dev_base_version" <<'NODE'
@@ -117,7 +131,12 @@ NODE
   fi
   echo "dev tag $dev_tag is already contained in main; continuing release from current main"
 else
-  git merge --ff-only "$dev_tag"
+  if git merge-base --is-ancestor HEAD "$dev_tag"; then
+    git merge --ff-only "$dev_tag"
+  else
+    echo "main and $dev_tag diverged; merging dev tag into main"
+    git merge --no-edit -X theirs "$dev_tag"
+  fi
 fi
 
 if [[ "$skip_checks" == false ]]; then
@@ -126,18 +145,58 @@ if [[ "$skip_checks" == false ]]; then
   npm run pack:dry-run
 fi
 
-if [[ -z "$last_tag" ]]; then
-  next_version="0.0.1"
-else
-  last_version="${last_tag#v}"
-  IFS=. read -r major minor patch <<<"$last_version"
-  case "$bump_kind" in
-    small) patch=$((patch + 1)) ;;
-    mid) minor=$((minor + 1)); patch=0 ;;
-    large) major=$((major + 1)); minor=0; patch=0 ;;
-  esac
-  next_version="$major.$minor.$patch"
-fi
+next_version="$(
+  node - "$last_tag" "$dev_base_version" "$bump_kind" <<'NODE'
+const [lastTagRaw, devBaseRaw, bumpKind] = process.argv.slice(2);
+
+function parseVersion(raw, label) {
+  const version = (raw || "").replace(/^v/, "");
+  const match = version.match(/^(\d+)\.(\d+)\.(\d+)$/);
+  if (!match) {
+    console.error(`invalid ${label} version: ${raw}`);
+    process.exit(1);
+  }
+  return match.slice(1).map(Number);
+}
+
+function compare(left, right) {
+  for (let i = 0; i < 3; i += 1) {
+    if (left[i] !== right[i]) return left[i] - right[i];
+  }
+  return 0;
+}
+
+const devBase = parseVersion(devBaseRaw, "dev base");
+let next;
+if (!lastTagRaw) {
+  next = [0, 0, 1];
+} else {
+  next = parseVersion(lastTagRaw, "latest production tag");
+  switch (bumpKind) {
+    case "small":
+      next[2] += 1;
+      break;
+    case "mid":
+      next[1] += 1;
+      next[2] = 0;
+      break;
+    case "large":
+      next[0] += 1;
+      next[1] = 0;
+      next[2] = 0;
+      break;
+    default:
+      console.error(`invalid bump: ${bumpKind}`);
+      process.exit(1);
+  }
+}
+
+if (compare(next, devBase) < 0) {
+  next = devBase;
+}
+console.log(next.join("."));
+NODE
+)"
 
 next_tag="v$next_version"
 if git rev-parse -q --verify "refs/tags/$next_tag" >/dev/null; then
