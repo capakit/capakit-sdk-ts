@@ -53,6 +53,37 @@ describe("workload SDK HTTP mounting", () => {
             restoreEnv();
         }
     });
+
+    test("mounted endpoint handlers receive app-relative paths", async () => {
+        const restoreEnv = withWorkloadEnv();
+        try {
+            const sdk = createWorkloadSdk() as InternalWorkloadSdk;
+            sdk.mount({
+                protocol: "http",
+                endpoint: endpointPath("/http"),
+                handler: (request, context) => {
+                    const url = new URL(request.url);
+                    return Response.json({
+                        path: url.pathname,
+                        search: url.search,
+                        endpoint: context.endpoint,
+                    });
+                },
+            });
+
+            const response = await sdk.handleRequest(
+                new Request("http://capakit.local/http/checks/readiness?probe=1"),
+            );
+
+            await expect(response.json()).resolves.toEqual({
+                path: "/checks/readiness",
+                search: "?probe=1",
+                endpoint: "/http",
+            });
+        } finally {
+            restoreEnv();
+        }
+    });
 });
 
 function withWorkloadEnv(): () => void {
