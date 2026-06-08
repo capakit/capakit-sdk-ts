@@ -4,12 +4,14 @@ import {
     WORKLOAD_SDK_CLIENT_LIFECYCLE,
     type WorkloadSdkClientCleanup,
 } from "../src/client-lifecycle.ts";
+import { endpointPath } from "../src/ids.ts";
 import { createWorkloadSdk } from "../src/index.ts";
 import type { WorkloadSdk } from "../src/public-types.ts";
 import { WORKLOAD_ENV_KEYS } from "../src/workload-env.ts";
 
 type InternalWorkloadSdk = WorkloadSdk & {
     [WORKLOAD_SDK_CLIENT_LIFECYCLE]?: (cleanup: WorkloadSdkClientCleanup) => void;
+    handleRequest(request: Request): Promise<Response>;
 };
 
 describe("workload SDK client lifecycle", () => {
@@ -26,6 +28,27 @@ describe("workload SDK client lifecycle", () => {
             await sdk.stop();
 
             expect(closed).toBe(1);
+        } finally {
+            restoreEnv();
+        }
+    });
+});
+
+describe("workload SDK HTTP mounting", () => {
+    test("root endpoint handles subpaths", async () => {
+        const restoreEnv = withWorkloadEnv();
+        try {
+            const sdk = createWorkloadSdk() as InternalWorkloadSdk;
+            sdk.mount({
+                protocol: "http",
+                endpoint: endpointPath("/"),
+                handler: (request) =>
+                    Response.json({ path: new URL(request.url).pathname }),
+            });
+
+            const response = await sdk.handleRequest(new Request("http://capakit.local/health"));
+
+            await expect(response.json()).resolves.toEqual({ path: "/health" });
         } finally {
             restoreEnv();
         }

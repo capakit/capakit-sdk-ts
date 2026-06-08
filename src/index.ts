@@ -395,5 +395,8 @@ function processExists(pid: number): boolean {
 }
 
 function pathMatchesEndpoint(path: string, endpoint: EndpointPath): boolean {
+    if (endpoint === "/") {
+        return path.startsWith("/");
+    }
     return path === endpoint || path.startsWith(`${endpoint}/`);
 }
