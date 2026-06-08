@@ -338,7 +338,7 @@ class HostedWorkloadSdk implements WorkloadSdk {
             stop: mount.stop,
             handleRequest: async (request) => {
                 return await mount.handler(
-                    request,
+                    requestForMountedTransport(request, mount.endpoint),
                     {
                         ...this.lifecycleContext(),
                         protocol: mount.protocol,
@@ -399,4 +399,18 @@ function pathMatchesEndpoint(path: string, endpoint: EndpointPath): boolean {
         return path.startsWith("/");
     }
     return path === endpoint || path.startsWith(`${endpoint}/`);
+}
+
+function requestForMountedTransport(request: Request, endpoint: EndpointPath): Request {
+    if (endpoint === "/") {
+        return request;
+    }
+
+    const url = new URL(request.url);
+    if (url.pathname === endpoint) {
+        url.pathname = "/";
+    } else if (url.pathname.startsWith(`${endpoint}/`)) {
+        url.pathname = url.pathname.slice(endpoint.length) || "/";
+    }
+    return new Request(url.toString(), request);
 }
