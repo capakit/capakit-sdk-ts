@@ -9,6 +9,7 @@
     "bugs": {
         "url": "https://github.com/capakit/capakit-sdk-ts/issues"
     },
+    "license": "Apache-2.0",
     "homepage": "https://github.com/capakit/capakit-sdk-ts#readme",
     "type": "module",
     "files": [
