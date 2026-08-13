@@ -1,9 +1,9 @@
-import type { WorkloadSdk, ClientOptions, EndpointPath, WorkloadMid } from "../public-types.ts";
+import type { WorkloadSdk, ClientOptions, EndpointPath, WorkloadKey } from "../public-types.ts";
 
 export type GoogleAiStudioClient = import("@google/genai").GoogleGenAI;
 export declare function createGoogleAiStudioClient(
     sdk: WorkloadSdk,
-    workloadMid: WorkloadMid,
+    workloadKey: WorkloadKey,
     endpointPath: EndpointPath,
     options?: ClientOptions,
 ): Promise<GoogleAiStudioClient>;

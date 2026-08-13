@@ -10,7 +10,7 @@ import type {
     EndpointPath,
     HostedBind,
     WorkloadSdk,
-    WorkloadMid,
+    WorkloadKey,
 } from "./public-types.ts";
 import { registerSdkClientCleanup } from "./client-lifecycle.ts";
 
@@ -48,11 +48,11 @@ export type WebSocketClient = WebSocket;
 
 export async function connectWebSocket(
     sdk: WorkloadSdk,
-    workloadMid: WorkloadMid,
+    workloadKey: WorkloadKey,
     endpointPath: EndpointPath,
     options: ClientOptions = {},
 ): Promise<WebSocketClient> {
-    const endpoint = sdk.workloads.endpoint(workloadMid, endpointPath, options);
+    const endpoint = sdk.workloads.endpoint(workloadKey, endpointPath, options);
     const webSocket = await connectHostedWebSocket(
         endpoint.bind,
         endpoint.endpoint,

@@ -49,7 +49,7 @@ const sdk = createWorkloadSdk();
 sdk.hijackConsoleLogging();
 
 const server = new McpServer({
-    name: process.env.CAPAKIT_WORKLOAD_MID ?? "hello",
+    name: process.env.CAPAKIT_WORKLOAD_KEY ?? "hello",
     version: "0.1.0",
 });
 
@@ -80,21 +80,21 @@ Workloads can use only the mounts and connections declared for them in `capabili
 ```ts
 import {
     endpointPath,
-    hostMountMid,
-    workloadMid,
+    hostMountKey,
+    workloadKey,
 } from "@capakit/sdk";
 import type {WorkloadSdk} from "@capakit/sdk";
 import {createOaicClient} from "@capakit/sdk/oaic";
 
 export async function createModelRuntime(sdk: WorkloadSdk) {
-    const models = sdk.mounts.get(hostMountMid("models"));
+    const models = sdk.mounts.get(hostMountKey("models"));
     if (!models) {
         throw new Error("missing required host mount `models`");
     }
 
     const client = await createOaicClient(
         sdk,
-        workloadMid("llama"),
+        workloadKey("llama"),
         endpointPath("/oaic"),
     );
 

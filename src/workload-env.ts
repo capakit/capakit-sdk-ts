@@ -1,7 +1,7 @@
 import {
     endpointPath,
-    hostMountMid,
-    workloadMid,
+    hostMountKey,
+    workloadKey,
 } from "./ids.ts";
 import type {
     EndpointPath,
@@ -9,46 +9,32 @@ import type {
     HostedBindValue,
     PresenceId,
     EndpointProtocol,
-    WorkloadMid,
+    WorkloadKey,
 } from "./public-types.ts";
 import { normalizeMountAccess } from "./mounts.ts";
 
 export const WORKLOAD_ENV_KEYS = {
     connectedWorkloads: "CAPAKIT_CONNECTED_WORKLOADS",
     workloadIngressBind: "CAPAKIT_WORKLOAD_INGRESS_BIND",
-    workloadHostBackend: "CAPAKIT_WORKLOAD_HOST_BACKEND",
     workloadHostPid: "CAPAKIT_WORKLOAD_HOST_PID",
     workloadBridgeBind: "CAPAKIT_WORKLOAD_BRIDGE_BIND",
-    workloadRuntimeSid: "CAPAKIT_WORKLOAD_RUNTIME_SID",
     presenceId: "CAPAKIT_PRESENCE_ID",
-    workloadMid: "CAPAKIT_WORKLOAD_MID",
+    workloadKey: "CAPAKIT_WORKLOAD_KEY",
     mounts: "CAPAKIT_MOUNTS_JSON",
 } as const;
-
-export type WorkloadHostBackend =
-    | "embedded"
-    | "mac_os"
-    | "mac_os_sandbox"
-    | "windows"
-    | "windows_sandbox"
-    | "docker"
-    | "vm"
-    | "remote";
 
 export type WorkloadEnv = {
     connectedWorkloads: HostedWorkloadConnectionConfig[];
     mounts: HostMount[];
     workloadIngressBind: HostedBindValue;
-    workloadHostBackend?: WorkloadHostBackend;
     workloadHostPid?: number;
     workloadBridgeBind?: HostedBindValue;
-    workloadRuntimeSid?: string;
     presenceId?: PresenceId;
-    workloadMid?: WorkloadMid;
+    workloadKey?: WorkloadKey;
 };
 
 export type HostedWorkloadConnectionConfig = {
-    workloadMid: WorkloadMid;
+    workloadKey: WorkloadKey;
     endpoint: EndpointPath;
     protocol: EndpointProtocol;
     bind: HostedBindValue;
@@ -59,12 +45,10 @@ export function loadWorkloadEnv(env: NodeJS.ProcessEnv = process.env): WorkloadE
         connectedWorkloads: loadConnectedWorkloadConfigs(env),
         mounts: loadHostMountConfigs(env),
         workloadIngressBind: requiredEnv(env, WORKLOAD_ENV_KEYS.workloadIngressBind),
-        workloadHostBackend: optionalHostBackend(env[WORKLOAD_ENV_KEYS.workloadHostBackend]),
         workloadHostPid: optionalPositiveInt(env[WORKLOAD_ENV_KEYS.workloadHostPid]),
         workloadBridgeBind: env[WORKLOAD_ENV_KEYS.workloadBridgeBind],
-        workloadRuntimeSid: env[WORKLOAD_ENV_KEYS.workloadRuntimeSid],
         presenceId: optionalPresenceId(env[WORKLOAD_ENV_KEYS.presenceId]),
-        workloadMid: optionalWorkloadMid(env[WORKLOAD_ENV_KEYS.workloadMid]),
+        workloadKey: optionalWorkloadKey(env[WORKLOAD_ENV_KEYS.workloadKey]),
     };
 }
 
@@ -110,12 +94,12 @@ function normalizeHostMountConfig(key: string, value: unknown): HostMount {
         throw new Error("host mount entry must be an object");
     }
     const record = value as Record<string, unknown>;
-    const mid = stringField(record, "mid");
-    if (mid !== key) {
-        throw new Error(`host mount entry key \`${key}\` does not match mid \`${mid}\``);
+    const mountKey = stringField(record, "key");
+    if (mountKey !== key) {
+        throw new Error(`host mount entry key \`${key}\` does not match key \`${mountKey}\``);
     }
     return {
-        mid: hostMountMid(mid),
+        key: hostMountKey(mountKey),
         path: stringField(record, "path"),
         access: normalizeMountAccess(record.access),
     };
@@ -127,7 +111,7 @@ function normalizeConnectedWorkload(value: unknown): HostedWorkloadConnectionCon
     }
     const record = value as Record<string, unknown>;
     return {
-        workloadMid: workloadMid(stringField(record, "workloadMid")),
+        workloadKey: workloadKey(stringField(record, "workloadKey")),
         endpoint: endpointPath(stringField(record, "endpoint")),
         protocol: protocolField(record),
         bind: stringField(record, "bind"),
@@ -147,16 +131,12 @@ function protocolField(record: Record<string, unknown>): EndpointProtocol {
     }
 }
 
-function optionalHostBackend(value: string | undefined): WorkloadHostBackend | undefined {
-    return value as WorkloadHostBackend | undefined;
-}
-
 function optionalPresenceId(value: string | undefined): PresenceId | undefined {
     return value as PresenceId | undefined;
 }
 
-function optionalWorkloadMid(value: string | undefined): WorkloadMid | undefined {
-    return value ? workloadMid(value) : undefined;
+function optionalWorkloadKey(value: string | undefined): WorkloadKey | undefined {
+    return value ? workloadKey(value) : undefined;
 }
 
 function optionalPositiveInt(value: string | undefined): number | undefined {

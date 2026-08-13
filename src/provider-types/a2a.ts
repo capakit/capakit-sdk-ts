@@ -1,4 +1,4 @@
-import type { WorkloadSdk, ClientOptions, EndpointPath, WorkloadMid } from "../public-types.ts";
+import type { WorkloadSdk, ClientOptions, EndpointPath, WorkloadKey } from "../public-types.ts";
 
 export type A2aAgentCard = import("@a2a-js/sdk").AgentCard;
 export type A2aAgentExecutor = import("@a2a-js/sdk/server").AgentExecutor;
@@ -12,7 +12,7 @@ export type A2aMountOptions = {
 };
 export declare function createA2aClient(
     sdk: WorkloadSdk,
-    workloadMid: WorkloadMid,
+    workloadKey: WorkloadKey,
     endpointPath: EndpointPath,
     options?: ClientOptions,
 ): Promise<A2aClient>;

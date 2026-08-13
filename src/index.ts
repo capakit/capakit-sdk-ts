@@ -34,13 +34,15 @@ import {
     removeSocket,
 } from "./transport.ts";
 import { WorkloadConnectionsImpl } from "./workloads.ts";
+import { WorkloadBridgeClient } from "./rpc.ts";
+import { requireWorkloadBridgeBind } from "./workload-env.ts";
 
 export type * from "./public-types.ts";
 export {
     endpointPath,
-    hostMountMid,
-    secretMid,
-    workloadMid,
+    hostMountKey,
+    secretKey,
+    workloadKey,
 } from "./ids.ts";
 
 type MountedHttpTransport = {
@@ -123,10 +125,20 @@ class HostedWorkloadSdk implements WorkloadSdk {
         );
         await listen(server, this.bind);
         this.server = server;
+        try {
+            await reportWorkloadReadyWithEnv(this.env);
+        } catch (error) {
+            this.server = null;
+            await closeServer(server);
+            if (this.bind.kind === "unix") {
+                await removeSocket(this.bind.path);
+            }
+            throw error;
+        }
         this.installSignalHandlers();
         this.installParentMonitor();
         console.log(
-            `[@capakit/sdk] workload=${this.env.workloadMid ?? "unknown"} listening`,
+            `[@capakit/sdk] workload=${this.env.workloadKey ?? "unknown"} listening`,
         );
     }
 
@@ -190,7 +202,7 @@ class HostedWorkloadSdk implements WorkloadSdk {
     private lifecycleContext(): WorkloadPresenceLifecycleContext {
         return {
             presenceId: this.env.presenceId,
-            workloadMid: this.env.workloadMid,
+            workloadKey: this.env.workloadKey,
         };
     }
 
@@ -355,6 +367,19 @@ class HostedWorkloadSdk implements WorkloadSdk {
             .sort((left, right) => right.endpoint.length - left.endpoint.length);
         return matches[0] ?? null;
     }
+}
+
+async function reportWorkloadReadyWithEnv(env: WorkloadEnv): Promise<void> {
+    const bridge = new WorkloadBridgeClient(requireWorkloadBridgeBind(env));
+    try {
+        await bridge.call<void>("workload_ready", null);
+    } finally {
+        await bridge.close();
+    }
+}
+
+export async function reportWorkloadReady(): Promise<void> {
+    await reportWorkloadReadyWithEnv(loadWorkloadEnv());
 }
 
 export function createWorkloadSdk(options: WorkloadSdkOptions = {}): WorkloadSdk {

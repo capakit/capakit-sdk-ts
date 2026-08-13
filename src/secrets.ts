@@ -1,6 +1,6 @@
 import type {
     WorkloadSecrets,
-    SecretMid,
+    SecretKey,
 } from "./public-types.ts";
 import type { WorkloadEnv } from "./workload-env.ts";
 import { requireWorkloadBridgeBind } from "./workload-env.ts";
@@ -17,9 +17,9 @@ export class WorkloadSecretsImpl implements WorkloadSecrets {
         this.rpc = new WorkloadBridgeClient(requireWorkloadBridgeBind(env));
     }
 
-    async resolve(secretMid: SecretMid): Promise<string> {
+    async resolve(secretKey: SecretKey): Promise<string> {
         const result = await this.rpc.call<ResolveSecretResult>("resolve_secret", {
-            secret_mid: secretMid,
+            secret_key: secretKey,
         });
         return result.value;
     }

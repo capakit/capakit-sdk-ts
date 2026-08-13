@@ -6,7 +6,7 @@ import {
     WORKLOAD_SDK_CLIENT_LIFECYCLE,
     type WorkloadSdkClientCleanup,
 } from "../src/client-lifecycle.ts";
-import { endpointPath, workloadMid } from "../src/ids.ts";
+import { endpointPath, workloadKey } from "../src/ids.ts";
 import { createGoogleAiStudioClient } from "../src/google-ai-studio.ts";
 import type {
     EndpointPath,
@@ -61,7 +61,7 @@ describe("createGoogleAiStudioClient", () => {
         try {
             const client = await createGoogleAiStudioClient(
                 sdk,
-                workloadMid("google"),
+                workloadKey("google"),
                 endpointPath("/google"),
             );
 
@@ -102,12 +102,12 @@ describe("createGoogleAiStudioClient", () => {
         try {
             await createGoogleAiStudioClient(
                 first,
-                workloadMid("google-a"),
+                workloadKey("google-a"),
                 endpointPath("/google-a"),
             );
             await createGoogleAiStudioClient(
                 second,
-                workloadMid("google-b"),
+                workloadKey("google-b"),
                 endpointPath("/google-b"),
             );
             const patchedFetch = globalThis.fetch;
@@ -149,7 +149,7 @@ class TestWorkloadSdk implements WorkloadSdk {
         this.workloads = {
             workloads: [],
             endpoint: (workload, _endpoint, _options) => ({
-                workloadMid: workload,
+                workloadKey: workload,
                 endpoint: this.endpoint,
                 protocol: "oaic",
                 bind: this.bind,

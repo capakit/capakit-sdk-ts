@@ -5,7 +5,11 @@ const MODULES = [
     {
         name: "@capakit/sdk",
         files: ["src/public-types.ts"],
-        append: "export function createWorkloadSdk(options?: WorkloadSdkOptions): WorkloadSdk;\n",
+        append: [
+            "export function createWorkloadSdk(options?: WorkloadSdkOptions): WorkloadSdk;",
+            "export function reportWorkloadReady(): Promise<void>;",
+            "",
+        ].join("\n"),
     },
     { name: "@capakit/sdk/mcp", files: ["src/provider-types/mcp.ts"] },
     { name: "@capakit/sdk/testing", files: ["src/provider-types/testing.ts"] },

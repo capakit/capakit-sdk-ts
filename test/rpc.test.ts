@@ -17,34 +17,43 @@ describe("WorkloadBridgeClient", () => {
     test("sends JSONL requests and resolves ok responses", async () => {
         const server = await listenBridge(async (request, response) => {
             expect(request.op).toBe("resolve_secret");
-            expect(request.params).toEqual({ secret_mid: "secret:api_key" });
+            expect(request.params).toEqual({ secret_key: "api_key" });
             writeBridgeResponse(response, { id: request.id, ok: { value: "secret-value" } });
         });
         const client = new WorkloadBridgeClient(server.bind);
 
         await expect(client.call("resolve_secret", {
-            secret_mid: "secret:api_key",
+            secret_key: "api_key",
         })).resolves.toEqual({ value: "secret-value" });
 
         await client.close();
     });
 
     test("rejects structured bridge errors", async () => {
+        const wireError = {
+            code: "Unavailable",
+            message: "secret unavailable",
+            retryable: true,
+        };
         const server = await listenBridge(async (request, response) => {
             writeBridgeResponse(response, {
                 id: request.id,
-                error: {
-                    code: "Unavailable",
-                    message: "secret unavailable",
-                    retryable: true,
-                },
+                error: wireError,
             });
         });
         const client = new WorkloadBridgeClient(server.bind);
 
-        await expect(client.call("resolve_secret", {
-            secret_mid: "secret:missing",
-        })).rejects.toThrow(/secret unavailable/);
+        let thrown: unknown;
+        try {
+            await client.call("resolve_secret", {
+                secret_key: "missing",
+            });
+        } catch (error) {
+            thrown = error;
+        }
+        expect(thrown).toBeInstanceOf(Error);
+        expect((thrown as Error).message).toMatch(/secret unavailable/);
+        expect((thrown as Error).cause).toEqual(wireError);
 
         await client.close();
     });
@@ -68,6 +77,130 @@ describe("WorkloadBridgeClient", () => {
         const client = new WorkloadBridgeClient(server.bind);
 
         await expect(client.call("ping", {})).rejects.toThrow(/missing string id/);
+        await client.close();
+    });
+
+    test("parses split response frames and waits for clean termination", async () => {
+        let markFrameWritten: (() => void) | undefined;
+        const frameWritten = new Promise<void>((resolve) => {
+            markFrameWritten = resolve;
+        });
+        let releaseResponse: (() => void) | undefined;
+        const responseReleased = new Promise<void>((resolve) => {
+            releaseResponse = resolve;
+        });
+        const server = await listenRaw(async (request, response) => {
+            const [frame] = decodeFrames(await readRequestBody(request)) as BridgeRequest[];
+            const body = encodeFrame({ id: frame.id, ok: "pong" });
+            response.writeHead(200, { "content-type": BRIDGE_CONTENT_TYPE });
+            response.write(body.subarray(0, 5));
+            response.write(body.subarray(5));
+            markFrameWritten?.();
+            await responseReleased;
+            response.end();
+        });
+        const client = new WorkloadBridgeClient(server.bind);
+        let settled = false;
+        const call = client.call("ping", {}).finally(() => {
+            settled = true;
+        });
+
+        await frameWritten;
+        await Promise.resolve();
+        expect(settled).toBe(false);
+        releaseResponse?.();
+        await expect(call).resolves.toBe("pong");
+        await client.close();
+    });
+
+    test("rejects unexpected, duplicate, and incomplete response frames", async () => {
+        for (const body of [
+            encodeFrame({ id: "unexpected", ok: true }),
+            Buffer.concat([
+                encodeFrame({ id: "1", ok: true }),
+                encodeFrame({ id: "1", ok: true }),
+            ]),
+            Buffer.from('{"id":"1","ok":true}', "utf8"),
+        ]) {
+            const server = await listenRaw((_request, response) => {
+                response.writeHead(200, { "content-type": BRIDGE_CONTENT_TYPE });
+                response.end(body);
+            });
+            const client = new WorkloadBridgeClient(server.bind);
+
+            await expect(client.call("ping", {})).rejects.toThrow();
+            await client.close();
+        }
+    });
+
+    test("rejects invalid UTF-8 and oversized response frames", async () => {
+        for (const body of [
+            Buffer.from([0xff, 0x0a]),
+            Buffer.concat([
+                Buffer.alloc(4 * 1024 * 1024 + 2, 0x78),
+                Buffer.from("\n"),
+            ]),
+        ]) {
+            const server = await listenRaw((_request, response) => {
+                response.writeHead(200, { "content-type": BRIDGE_CONTENT_TYPE });
+                response.end(body);
+            });
+            const client = new WorkloadBridgeClient(server.bind);
+
+            await expect(client.call("ping", {})).rejects.toThrow();
+            await client.close();
+        }
+    });
+
+    test("close aborts active calls", async () => {
+        let markStarted: (() => void) | undefined;
+        const started = new Promise<void>((resolve) => {
+            markStarted = resolve;
+        });
+        const server = await listenRaw((_request, response) => {
+            markStarted?.();
+            return new Promise<void>((resolve) => response.once("close", resolve));
+        });
+        const client = new WorkloadBridgeClient(server.bind);
+        const call = client.call("ping", {});
+        const rejected = expect(call).rejects.toThrow();
+
+        await started;
+        await client.close();
+        await rejected;
+    });
+
+    test("supports concurrent calls within one generation", async () => {
+        const server = await listenBridge(async (request, response) => {
+            writeBridgeResponse(response, { id: request.id, ok: request.op });
+        });
+        const client = new WorkloadBridgeClient(server.bind);
+
+        await expect(
+            Promise.all([
+                client.call("first", {}),
+                client.call("second", {}),
+                client.call("third", {}),
+            ]),
+        ).resolves.toEqual(["first", "second", "third"]);
+        await client.close();
+    });
+
+    test("reuses sockets within a generation and recreates them after close", async () => {
+        const sockets = new Set<IncomingMessage["socket"]>();
+        const server = await listenBridge(async (request, response) => {
+            sockets.add(response.req.socket);
+            writeBridgeResponse(response, { id: request.id, ok: "pong" });
+        });
+        const client = new WorkloadBridgeClient(server.bind);
+
+        await client.call("ping", {});
+        await client.call("ping", {});
+        expect(sockets.size).toBe(1);
+
+        await client.close();
+        await client.call("ping", {});
+        expect(sockets.size).toBe(2);
         await client.close();
     });
 });

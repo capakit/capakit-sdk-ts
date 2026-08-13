@@ -1,24 +1,24 @@
 import type {
     HostMount,
     HostMountAccess,
-    HostMountMid,
+    HostMountKey,
     HostMounts,
 } from "./public-types.ts";
 import type { WorkloadEnv } from "./workload-env.ts";
 
 export class HostMountsImpl implements HostMounts {
-    private readonly mountByMid: ReadonlyMap<HostMountMid, HostMount>;
+    private readonly mountByKey: ReadonlyMap<HostMountKey, HostMount>;
 
     constructor(env: WorkloadEnv) {
-        this.mountByMid = new Map(env.mounts.map((mount) => [mount.mid, mount]));
+        this.mountByKey = new Map(env.mounts.map((mount) => [mount.key, mount]));
     }
 
-    get(mountMid: HostMountMid): HostMount | undefined {
-        return this.mountByMid.get(mountMid);
+    get(mountKey: HostMountKey): HostMount | undefined {
+        return this.mountByKey.get(mountKey);
     }
 
     list(): readonly HostMount[] {
-        return Array.from(this.mountByMid.values());
+        return Array.from(this.mountByKey.values());
     }
 }
 

@@ -1,88 +1,108 @@
-import { request as requestHttp } from "node:http";
-import type { IncomingMessage, RequestOptions } from "node:http";
+import { Agent, request as requestHttp } from "node:http";
+import type {
+    ClientRequest,
+    IncomingMessage,
+    RequestOptions,
+} from "node:http";
 
 import { parseBind } from "./transport.ts";
 import type { HostedBind } from "./public-types.ts";
 
 const BRIDGE_CONTENT_TYPE = "application/x-capakit-workload-bridge-jsonl";
 const MAX_FRAME_BYTES = 4 * 1024 * 1024;
-const MAX_BUFFER_BYTES = 8 * 1024 * 1024;
+const MAX_PARTIAL_FRAME_BYTES = MAX_FRAME_BYTES + 1;
 
 type BridgeResponse = { id: string; ok: unknown } | { id: string; error: unknown };
+
+type ClientGeneration = {
+    agent: Agent;
+    calls: Set<AbortController>;
+};
 
 export class WorkloadBridgeClient {
     private nextId = 1;
     private readonly bind: HostedBind;
+    private generation: ClientGeneration | null = null;
 
     constructor(value: string) {
         this.bind = parseBind(value);
     }
 
     async call<Result>(op: string, params: unknown): Promise<Result> {
-        const id = String(this.nextId++);
-        const response = await this.send(id, { id, op, params });
-        if ("error" in response) {
-            throw new Error(formatRpcError(response.error));
+        const generation = this.currentGeneration();
+        const controller = new AbortController();
+        generation.calls.add(controller);
+        try {
+            const id = String(this.nextId++);
+            const response = await this.send(
+                id,
+                { id, op, params },
+                generation.agent,
+                controller.signal,
+            );
+            if ("error" in response) {
+                throw new Error(formatRpcError(response.error), {
+                    cause: response.error,
+                });
+            }
+            return response.ok as Result;
+        } finally {
+            generation.calls.delete(controller);
         }
-        return response.ok as Result;
     }
 
-    async close(): Promise<void> {}
+    async close(): Promise<void> {
+        const generation = this.generation;
+        this.generation = null;
+        if (!generation) {
+            return;
+        }
+        const reason = new Error("workload bridge client closed");
+        for (const controller of generation.calls) {
+            controller.abort(reason);
+        }
+        generation.agent.destroy();
+    }
 
-    private async send(id: string, request: unknown): Promise<BridgeResponse> {
-        const frame = encodeJsonLine(request);
-        return await new Promise<BridgeResponse>((resolve, reject) => {
-            const parser = new JsonLineParser();
-            let settled = false;
-            const settle = (fn: () => void) => {
-                if (settled) {
-                    return;
-                }
-                settled = true;
-                fn();
+    private currentGeneration(): ClientGeneration {
+        if (!this.generation) {
+            this.generation = {
+                agent: new Agent({ keepAlive: true }),
+                calls: new Set(),
             };
-            const req = requestHttp(bridgeRequestOptions(this.bind, frame.length), (response) => {
-                try {
-                    validateBridgeResponse(response);
-                } catch (error) {
-                    settle(() =>
-                        reject(error instanceof Error ? error : new Error(String(error))),
-                    );
-                    response.destroy();
-                    req.destroy();
-                    return;
-                }
-                response.on("data", (chunk: Buffer) => {
-                    try {
-                        for (const item of parser.feed(chunk)) {
-                            const decoded = decodeBridgeResponse(item);
-                            if (decoded.id === id) {
-                                settle(() => resolve(decoded));
-                            }
-                        }
-                    } catch (error) {
-                        settle(() =>
-                            reject(error instanceof Error ? error : new Error(String(error))),
-                        );
-                    }
+        }
+        return this.generation;
+    }
+
+    private async send(
+        id: string,
+        request: unknown,
+        agent: Agent,
+        signal: AbortSignal,
+    ): Promise<BridgeResponse> {
+        const frame = encodeJsonLine(request);
+        let req: ClientRequest | undefined;
+        let response: IncomingMessage | undefined;
+        try {
+            response = await new Promise<IncomingMessage>((resolve, reject) => {
+                req = requestHttp(
+                    bridgeRequestOptions(this.bind, frame.length, agent, signal),
+                );
+                req.once("response", resolve);
+                req.once("error", reject);
+                req.once("socket", (socket) => {
+                    socket.setNoDelay?.(true);
                 });
-                response.on("error", (error) => settle(() => reject(error)));
-                response.on("end", () => {
-                    settle(() =>
-                        reject(
-                            new Error(
-                                "workload bridge response ended without a matching response",
-                            ),
-                        ),
-                    );
-                });
+                req.end(frame);
             });
-            req.on("error", (error) => settle(() => reject(error)));
-            req.on("socket", (socket) => {
-                socket.setNoDelay?.(true);
-            });
-            req.end(frame);
-        });
+            validateBridgeResponse(response);
+            return await readBridgeResponse(response, id);
+        } catch (error) {
+            const normalized = normalizeError(error);
+            response?.destroy(normalized);
+            req?.destroy(normalized);
+            throw normalized;
+        }
     }
 }
 
@@ -94,38 +114,89 @@ function encodeJsonLine(value: unknown): Buffer {
     return Buffer.concat([body, Buffer.from("\n")]);
 }
 
+async function readBridgeResponse(
+    response: IncomingMessage,
+    id: string,
+): Promise<BridgeResponse> {
+    const parser = new JsonLineParser();
+    let result: BridgeResponse | undefined;
+    for await (const value of response) {
+        const chunk = Buffer.isBuffer(value) ? value : Buffer.from(value);
+        for (const item of parser.feed(chunk)) {
+            const decoded = decodeBridgeResponse(item);
+            if (decoded.id !== id) {
+                throw new Error(
+                    `workload bridge returned unexpected response id \`${decoded.id}\``,
+                );
+            }
+            if (result) {
+                throw new Error("workload bridge returned multiple response frames");
+            }
+            result = decoded;
+        }
+    }
+    if (!response.complete) {
+        throw new Error("workload bridge response terminated before completion");
+    }
+    if (parser.hasPartial()) {
+        throw new Error("workload bridge response ended with an incomplete frame");
+    }
+    if (!result) {
+        throw new Error("workload bridge response ended without a matching response");
+    }
+    return result;
+}
+
 class JsonLineParser {
-    private buffer = Buffer.alloc(0);
+    private parts: Buffer[] = [];
+    private partialBytes = 0;
 
     feed(chunk: Buffer): unknown[] {
-        this.buffer = Buffer.concat([this.buffer, chunk]);
-        if (this.buffer.length > MAX_BUFFER_BYTES) {
-            this.buffer = Buffer.alloc(0);
-            throw new Error("workload bridge frame buffer limit exceeded");
-        }
-
         const parsed: unknown[] = [];
-        while (true) {
-            const lineEnd = this.buffer.indexOf(0x0a);
+        let offset = 0;
+        while (offset < chunk.length) {
+            const lineEnd = chunk.indexOf(0x0a, offset);
             if (lineEnd < 0) {
+                this.append(chunk.subarray(offset));
                 break;
             }
-            let body = this.buffer.subarray(0, lineEnd);
-            this.buffer = this.buffer.subarray(lineEnd + 1);
+            this.append(chunk.subarray(offset, lineEnd));
+            let body = Buffer.concat(this.parts, this.partialBytes);
+            this.parts = [];
+            this.partialBytes = 0;
+            offset = lineEnd + 1;
+
             if (body.at(-1) === 0x0d) {
                 body = body.subarray(0, body.length - 1);
             }
             if (body.length === 0) {
                 continue;
             }
-            const bodyLength = body.length;
-            if (bodyLength > MAX_FRAME_BYTES) {
-                this.buffer = Buffer.alloc(0);
+            if (body.length > MAX_FRAME_BYTES) {
                 throw new Error("workload bridge frame exceeds maximum size");
             }
-            parsed.push(JSON.parse(body.toString("utf8")));
+            const text = new TextDecoder("utf-8", { fatal: true }).decode(body);
+            parsed.push(JSON.parse(text));
         }
         return parsed;
+    }
+
+    hasPartial(): boolean {
+        return this.partialBytes > 0;
+    }
+
+    private append(chunk: Buffer): void {
+        if (chunk.length > Number.MAX_SAFE_INTEGER - this.partialBytes) {
+            throw new Error("workload bridge frame size overflow");
+        }
+        const nextBytes = this.partialBytes + chunk.length;
+        if (nextBytes > MAX_PARTIAL_FRAME_BYTES) {
+            throw new Error("workload bridge frame exceeds maximum size");
+        }
+        if (chunk.length > 0) {
+            this.parts.push(chunk);
+            this.partialBytes = nextBytes;
+        }
     }
 }
 
@@ -174,14 +245,20 @@ function decodeBridgeResponse(value: unknown): BridgeResponse {
     throw new Error("workload bridge response must include ok or error");
 }
 
-function bridgeRequestOptions(bind: HostedBind, contentLength: number): RequestOptions {
+function bridgeRequestOptions(
+    bind: HostedBind,
+    contentLength: number,
+    agent: Agent,
+    signal: AbortSignal,
+): RequestOptions {
     const base: RequestOptions = {
         method: "POST",
         path: "/rpc",
+        agent,
+        signal,
         headers: {
             "content-type": BRIDGE_CONTENT_TYPE,
             "content-length": String(contentLength),
-            "connection": "close",
         },
     };
     if (bind.kind === "unix") {
@@ -210,4 +287,8 @@ function formatRpcError(error: unknown): string {
         return String((error as { message: unknown }).message);
     }
     return `workload bridge failed: ${JSON.stringify(error)}`;
+}
+
+function normalizeError(error: unknown): Error {
+    return error instanceof Error ? error : new Error(String(error));
 }

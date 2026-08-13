@@ -13,7 +13,7 @@ import type {
     HostedBind,
     WorkloadSdk,
     WorkloadSdkMount,
-    WorkloadMid,
+    WorkloadKey,
 } from "./public-types.ts";
 
 const MCP_STREAM_CONTENT_TYPE = "application/x-ndjson";
@@ -30,11 +30,11 @@ export type MountMcpOptions = {
 
 export async function createMcpClient(
     sdk: WorkloadSdk,
-    workloadMid: WorkloadMid,
+    workloadKey: WorkloadKey,
     endpointPath: EndpointPath,
     options: ClientOptions = {},
 ): Promise<McpClient> {
-    const endpoint = sdk.workloads.endpoint(workloadMid, endpointPath, options);
+    const endpoint = sdk.workloads.endpoint(workloadKey, endpointPath, options);
     const client = new Client({
         name: "@capakit/sdk",
         version: "0.0.0",

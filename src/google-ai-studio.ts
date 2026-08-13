@@ -2,7 +2,7 @@ import type {
     ClientOptions,
     EndpointPath,
     WorkloadSdk,
-    WorkloadMid,
+    WorkloadKey,
 } from "./public-types.ts";
 import { registerSdkClientCleanup } from "./client-lifecycle.ts";
 import { createExternalLlmFetch, localEndpointBaseUrl } from "./oaic.ts";
@@ -25,11 +25,11 @@ let fetchPatch: GoogleAiStudioFetchPatch | undefined;
 
 export async function createGoogleAiStudioClient(
     sdk: WorkloadSdk,
-    workloadMid: WorkloadMid,
+    workloadKey: WorkloadKey,
     endpointPath: EndpointPath,
     options: ClientOptions = {},
 ): Promise<GoogleAiStudioClient> {
-    const endpoint = sdk.workloads.endpoint(workloadMid, endpointPath, options);
+    const endpoint = sdk.workloads.endpoint(workloadKey, endpointPath, options);
     const hostedFetch = createExternalLlmFetch(endpoint.bind, endpoint.endpoint);
     const cleanupFetchRoute = installGoogleAiStudioFetchRoute(
         endpoint.endpoint,

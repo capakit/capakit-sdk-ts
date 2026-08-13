@@ -19,7 +19,7 @@ import type {
     WorkloadHttpHandler,
     WorkloadSdk,
     WorkloadSdkMount,
-    WorkloadMid,
+    WorkloadKey,
 } from "./public-types.ts";
 import { endpointPath as normalizeEndpointPath } from "./ids.ts";
 import { createHostedFetch } from "./transport.ts";
@@ -40,11 +40,11 @@ export type A2aMountOptions = {
 
 export async function createA2aClient(
     sdk: WorkloadSdk,
-    workloadMid: WorkloadMid,
+    workloadKey: WorkloadKey,
     endpointPath: EndpointPath,
     options: ClientOptions = {},
 ): Promise<A2aClient> {
-    const endpoint = sdk.workloads.endpoint(workloadMid, endpointPath, options);
+    const endpoint = sdk.workloads.endpoint(workloadKey, endpointPath, options);
     const client = await createHostedA2aClient(endpoint.bind, endpoint.endpoint);
     registerSdkCloseableClient(sdk, client);
     return client;

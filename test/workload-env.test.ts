@@ -13,7 +13,7 @@ describe("loadWorkloadEnv", () => {
         const env = loadWorkloadEnv({
             [WORKLOAD_ENV_KEYS.connectedWorkloads]: JSON.stringify([
                 {
-                    workloadMid: "mid:capability/workload",
+                    workloadKey: "worker",
                     endpoint: "chat",
                     protocol: "http",
                     bind: "tcp:127.0.0.1:4100",
@@ -21,12 +21,11 @@ describe("loadWorkloadEnv", () => {
             ]),
             [WORKLOAD_ENV_KEYS.workloadIngressBind]: "unix:/tmp/capakit.sock",
             [WORKLOAD_ENV_KEYS.workloadBridgeBind]: "tcp:127.0.0.1:4200",
-            [WORKLOAD_ENV_KEYS.workloadRuntimeSid]: "sid:runner/dev",
             [WORKLOAD_ENV_KEYS.presenceId]: "presence-1",
-            [WORKLOAD_ENV_KEYS.workloadMid]: "mid:self/workload",
+            [WORKLOAD_ENV_KEYS.workloadKey]: "self",
             [WORKLOAD_ENV_KEYS.mounts]: JSON.stringify({
                 docs: {
-                    mid: "docs",
+                    key: "docs",
                     path: "/Users/me/docs",
                     access: "read_write",
                 },
@@ -35,19 +34,18 @@ describe("loadWorkloadEnv", () => {
 
         expect(env.workloadIngressBind).toBe("unix:/tmp/capakit.sock");
         expect(env.workloadBridgeBind).toBe("tcp:127.0.0.1:4200");
-        expect(env.workloadRuntimeSid).toBe("sid:runner/dev");
         expect(env.presenceId).toBe("presence-1");
-        expect(env.workloadMid).toBe("mid:self/workload");
+        expect(env.workloadKey).toBe("self");
         expect(env.mounts).toEqual([
             {
-                mid: "docs",
+                key: "docs",
                 path: "/Users/me/docs",
                 access: "read_write",
             },
         ]);
         expect(env.connectedWorkloads).toEqual([
             {
-                workloadMid: "mid:capability/workload",
+                workloadKey: "worker",
                 endpoint: "/chat",
                 protocol: "http",
                 bind: "tcp:127.0.0.1:4100",
@@ -69,14 +67,14 @@ describe("loadHostMountConfigs", () => {
         expect(loadHostMountConfigs({
             [WORKLOAD_ENV_KEYS.mounts]: JSON.stringify({
                 docs: {
-                    mid: "docs",
+                    key: "docs",
                     path: "/Users/me/docs",
                     access: "read_only",
                 },
             }),
         })).toEqual([
             {
-                mid: "docs",
+                key: "docs",
                 path: "/Users/me/docs",
                 access: "read_only",
             },
@@ -87,7 +85,7 @@ describe("loadHostMountConfigs", () => {
         expect(() => loadHostMountConfigs({
             [WORKLOAD_ENV_KEYS.mounts]: JSON.stringify({
                 docs: {
-                    mid: "docs",
+                    key: "docs",
                     path: "/Users/me/docs",
                     access: "admin",
                 },
@@ -105,7 +103,7 @@ describe("loadConnectedWorkloadConfigs", () => {
         expect(() => loadConnectedWorkloadConfigs({
             [WORKLOAD_ENV_KEYS.connectedWorkloads]: JSON.stringify([
                 {
-                    workloadMid: "mid:capability/workload",
+                    workloadKey: "worker",
                     endpoint: "/chat",
                     protocol: "smtp",
                     bind: "tcp:127.0.0.1:4100",

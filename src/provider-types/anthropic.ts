@@ -1,9 +1,9 @@
-import type { WorkloadSdk, ClientOptions, EndpointPath, WorkloadMid } from "../public-types.ts";
+import type { WorkloadSdk, ClientOptions, EndpointPath, WorkloadKey } from "../public-types.ts";
 
 export type AnthropicClient = import("@anthropic-ai/sdk").default;
 export declare function createAnthropicClient(
     sdk: WorkloadSdk,
-    workloadMid: WorkloadMid,
+    workloadKey: WorkloadKey,
     endpointPath: EndpointPath,
     options?: ClientOptions,
 ): Promise<AnthropicClient>;

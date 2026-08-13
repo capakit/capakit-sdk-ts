@@ -7,9 +7,9 @@ type Brand<T, Name extends string> = T & {
 export type HostedBindValue = string;
 export type PresenceId = string;
 export type EndpointPath = Brand<string, "EndpointPath">;
-export type WorkloadMid = Brand<string, "WorkloadMid">;
-export type SecretMid = Brand<string, "SecretMid">;
-export type HostMountMid = Brand<string, "HostMountMid">;
+export type WorkloadKey = Brand<string, "WorkloadKey">;
+export type SecretKey = Brand<string, "SecretKey">;
+export type HostMountKey = Brand<string, "HostMountKey">;
 export type EndpointProtocol = "http" | "mcp" | "oaic" | "a2a";
 export type HostMountAccess = "read_only" | "read_write";
 
@@ -19,9 +19,9 @@ export type HostedBind =
     | { kind: "pipe"; name: string };
 
 export declare function endpointPath(value: string): EndpointPath;
-export declare function workloadMid(value: string): WorkloadMid;
-export declare function secretMid(value: string): SecretMid;
-export declare function hostMountMid(value: string): HostMountMid;
+export declare function workloadKey(value: string): WorkloadKey;
+export declare function secretKey(value: string): SecretKey;
+export declare function hostMountKey(value: string): HostMountKey;
 
 export type ClientOptions = {
     signal?: AbortSignal;
@@ -29,7 +29,7 @@ export type ClientOptions = {
 };
 
 export type WorkloadConnection = {
-    workloadMid: WorkloadMid;
+    workloadKey: WorkloadKey;
     endpoint: EndpointPath;
     protocol: EndpointProtocol;
 };
@@ -41,7 +41,7 @@ export type WorkloadEndpoint = WorkloadConnection & {
 export type WorkloadConnections = {
     readonly workloads: ReadonlyArray<WorkloadConnection>;
     endpoint(
-        workloadMid: WorkloadMid,
+        workloadKey: WorkloadKey,
         endpointPath: EndpointPath,
         options?: ClientOptions,
     ): WorkloadEndpoint;
@@ -49,18 +49,18 @@ export type WorkloadConnections = {
 };
 
 export type WorkloadSecrets = {
-    resolve(secretMid: SecretMid): Promise<string>;
+    resolve(secretKey: SecretKey): Promise<string>;
     close(): Promise<void>;
 };
 
 export type HostMount = {
-    mid: HostMountMid;
+    key: HostMountKey;
     path: string;
     access: HostMountAccess;
 };
 
 export type HostMounts = {
-    get(mountMid: HostMountMid): HostMount | undefined;
+    get(mountKey: HostMountKey): HostMount | undefined;
     list(): readonly HostMount[];
 };
 
@@ -98,7 +98,7 @@ export type ShutdownSignal = "SIGINT" | "SIGTERM";
 
 export type WorkloadPresenceLifecycleContext = {
     presenceId?: PresenceId;
-    workloadMid?: WorkloadMid;
+    workloadKey?: WorkloadKey;
 };
 
 export type WorkloadShutdownCause =

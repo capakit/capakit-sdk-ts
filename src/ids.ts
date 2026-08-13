@@ -1,8 +1,8 @@
 import type {
     EndpointPath,
-    HostMountMid,
-    SecretMid,
-    WorkloadMid,
+    HostMountKey,
+    SecretKey,
+    WorkloadKey,
 } from "./public-types.ts";
 
 export function endpointPath(value: string): EndpointPath {
@@ -12,14 +12,23 @@ export function endpointPath(value: string): EndpointPath {
     return (value.startsWith("/") ? value : `/${value}`) as EndpointPath;
 }
 
-export function workloadMid(value: string): WorkloadMid {
-    return value as WorkloadMid;
+export function workloadKey(value: string): WorkloadKey {
+    return manifestKey(value, "workload") as WorkloadKey;
 }
 
-export function secretMid(value: string): SecretMid {
-    return value as SecretMid;
+export function secretKey(value: string): SecretKey {
+    return manifestKey(value, "secret") as SecretKey;
 }
 
-export function hostMountMid(value: string): HostMountMid {
-    return value as HostMountMid;
+export function hostMountKey(value: string): HostMountKey {
+    return manifestKey(value, "host mount") as HostMountKey;
+}
+
+function manifestKey(value: string, kind: string): string {
+    if (!/^[a-z](?:[a-z0-9_-]*[a-z0-9])?$/.test(value)) {
+        throw new Error(
+            `${kind} key must start with a lowercase ASCII letter, end with a lowercase ASCII letter or digit, and contain only lowercase ASCII letters, digits, \`_\`, or \`-\``,
+        );
+    }
+    return value;
 }

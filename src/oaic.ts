@@ -5,7 +5,7 @@ import type {
     WorkloadHttpHandler,
     WorkloadSdk,
     WorkloadSdkMount,
-    WorkloadMid,
+    WorkloadKey,
 } from "./public-types.ts";
 import { registerSdkCloseableClient } from "./client-lifecycle.ts";
 import { endpointPath as normalizeEndpointPath } from "./ids.ts";
@@ -23,11 +23,11 @@ export type OaicMountOptions = {
 
 export async function createOaicClient(
     sdk: WorkloadSdk,
-    workloadMid: WorkloadMid,
+    workloadKey: WorkloadKey,
     endpointPath: EndpointPath,
     options: ClientOptions = {},
 ): Promise<OaicClient> {
-    const endpoint = sdk.workloads.endpoint(workloadMid, endpointPath, options);
+    const endpoint = sdk.workloads.endpoint(workloadKey, endpointPath, options);
     const client = new OpenAI({
         apiKey: "capakit-local",
         baseURL: localEndpointBaseUrl(endpoint.endpoint, "/v1"),
