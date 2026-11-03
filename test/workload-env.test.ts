@@ -25,7 +25,6 @@ describe("loadWorkloadEnv", () => {
             [WORKLOAD_ENV_KEYS.workloadKey]: "self",
             [WORKLOAD_ENV_KEYS.mounts]: JSON.stringify({
                 docs: {
-                    key: "docs",
                     path: "/Users/me/docs",
                     access: "read_write",
                 },
@@ -67,7 +66,6 @@ describe("loadHostMountConfigs", () => {
         expect(loadHostMountConfigs({
             [WORKLOAD_ENV_KEYS.mounts]: JSON.stringify({
                 docs: {
-                    key: "docs",
                     path: "/Users/me/docs",
                     access: "read_only",
                 },
@@ -85,7 +83,6 @@ describe("loadHostMountConfigs", () => {
         expect(() => loadHostMountConfigs({
             [WORKLOAD_ENV_KEYS.mounts]: JSON.stringify({
                 docs: {
-                    key: "docs",
                     path: "/Users/me/docs",
                     access: "admin",
                 },

@@ -94,12 +94,8 @@ function normalizeHostMountConfig(key: string, value: unknown): HostMount {
         throw new Error("host mount entry must be an object");
     }
     const record = value as Record<string, unknown>;
-    const mountKey = stringField(record, "key");
-    if (mountKey !== key) {
-        throw new Error(`host mount entry key \`${key}\` does not match key \`${mountKey}\``);
-    }
     return {
-        key: hostMountKey(mountKey),
+        key: hostMountKey(key),
         path: stringField(record, "path"),
         access: normalizeMountAccess(record.access),
     };
