@@ -1,10 +1,22 @@
-import { AGENT_CARD_PATH } from "@a2a-js/sdk";
+import {
+    A2A_VERSION_HEADER,
+    AGENT_CARD_PATH,
+    Extensions,
+    HTTP_EXTENSION_HEADER,
+} from "@a2a-js/sdk";
 import type { AgentCard } from "@a2a-js/sdk";
-import { A2AClient } from "@a2a-js/sdk/client";
+import {
+    Client,
+    ClientFactory,
+    ClientFactoryOptions,
+    DefaultAgentCardResolver,
+    JsonRpcTransportFactory,
+} from "@a2a-js/sdk/client";
 import {
     DefaultRequestHandler,
     InMemoryTaskStore,
     JsonRpcTransportHandler,
+    defaultServerCallContextBuilder,
 } from "@a2a-js/sdk/server";
 import type {
     AgentExecutor,
@@ -29,7 +41,7 @@ const AGENT_CARD_SUFFIX = `/${AGENT_CARD_PATH}`;
 export type A2aAgentCard = AgentCard;
 export type A2aAgentExecutor = AgentExecutor;
 export type A2aTaskStore = TaskStore;
-export type A2aClient = A2AClient;
+export type A2aClient = Client;
 
 export type A2aMountOptions = {
     endpoint: string | EndpointPath;
@@ -93,7 +105,15 @@ export function createA2aHandler(options: {
             return jsonResponse(jsonRpcParseError(), 400);
         }
 
-        const result = await jsonRpc.handle(payload);
+        const context = defaultServerCallContextBuilder({
+            extensions: Extensions.parseServiceParameter(
+                request.headers.get(HTTP_EXTENSION_HEADER) ?? undefined,
+            ),
+            user: undefined,
+            headers: Object.fromEntries(request.headers),
+            requestedVersion: request.headers.get(A2A_VERSION_HEADER) ?? undefined,
+        });
+        const result = await jsonRpc.handle(payload as Record<string, unknown>, context);
         if (isAsyncIterable(result)) {
             return jsonLinesResponse(result);
         }
@@ -104,13 +124,15 @@ export function createA2aHandler(options: {
 export async function createHostedA2aClient(
     bind: HostedBind,
     endpoint: EndpointPath,
-): Promise<A2AClient> {
-    return await A2AClient.fromCardUrl(
-        `http://capakit.local${endpoint}${AGENT_CARD_SUFFIX}`,
-        {
-            fetchImpl: createHostedFetch(bind),
-        },
+): Promise<A2aClient> {
+    const fetchImpl = createHostedFetch(bind);
+    const factory = new ClientFactory(
+        ClientFactoryOptions.createFrom(ClientFactoryOptions.default, {
+            transports: [new JsonRpcTransportFactory({ fetchImpl })],
+            cardResolver: new DefaultAgentCardResolver({ fetchImpl }),
+        }),
     );
+    return await factory.createFromUrl(`http://capakit.local${endpoint}`, AGENT_CARD_SUFFIX);
 }
 
 function jsonResponse(body: unknown, status = 200): Response {
