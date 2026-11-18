@@ -30,7 +30,6 @@ import {
     closeServer,
     createHostedServer,
     listen,
-    parseBind,
     removeSocket,
 } from "./transport.ts";
 import { WorkloadConnectionsImpl } from "./workloads.ts";
@@ -77,7 +76,7 @@ class HostedWorkloadSdk implements WorkloadSdk {
         this.env = loadWorkloadEnv();
         this.initialParentPid = currentParentPid();
         this.workloadHostPid = this.env.workloadHostPid;
-        this.bind = parseBind(options.bind ?? this.env.workloadIngressBind);
+        this.bind = options.bind ?? this.env.workloadIngressBind;
         this.onPresenceStart = options.onPresenceStart;
         this.onShutdown = options.onShutdown;
         this.workloads = new WorkloadConnectionsImpl(this.env);
@@ -130,7 +129,7 @@ class HostedWorkloadSdk implements WorkloadSdk {
         } catch (error) {
             this.server = null;
             await closeServer(server);
-            if (this.bind.kind === "unix") {
+            if (this.bind.kind === "uds") {
                 await removeSocket(this.bind.path);
             }
             throw error;
@@ -184,7 +183,7 @@ class HostedWorkloadSdk implements WorkloadSdk {
             );
         } finally {
             this.restoreConsoleLogging?.();
-            if (this.bind.kind === "unix") {
+            if (this.bind.kind === "uds") {
                 await removeSocket(this.bind.path);
             }
         }

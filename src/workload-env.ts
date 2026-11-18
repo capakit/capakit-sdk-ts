@@ -6,7 +6,7 @@ import {
 import type {
     EndpointPath,
     HostMount,
-    HostedBindValue,
+    HostedBind,
     PresenceId,
     EndpointProtocol,
     WorkloadKey,
@@ -26,9 +26,9 @@ export const WORKLOAD_ENV_KEYS = {
 export type WorkloadEnv = {
     connectedWorkloads: HostedWorkloadConnectionConfig[];
     mounts: HostMount[];
-    workloadIngressBind: HostedBindValue;
+    workloadIngressBind: HostedBind;
     workloadHostPid?: number;
-    workloadBridgeBind?: HostedBindValue;
+    workloadBridgeBind?: HostedBind;
     presenceId?: PresenceId;
     workloadKey?: WorkloadKey;
 };
@@ -37,16 +37,16 @@ export type HostedWorkloadConnectionConfig = {
     workloadKey: WorkloadKey;
     endpoint: EndpointPath;
     protocol: EndpointProtocol;
-    bind: HostedBindValue;
+    bind: HostedBind;
 };
 
 export function loadWorkloadEnv(env: NodeJS.ProcessEnv = process.env): WorkloadEnv {
     return {
         connectedWorkloads: loadConnectedWorkloadConfigs(env),
         mounts: loadHostMountConfigs(env),
-        workloadIngressBind: requiredEnv(env, WORKLOAD_ENV_KEYS.workloadIngressBind),
+        workloadIngressBind: hostedBind(JSON.parse(requiredEnv(env, WORKLOAD_ENV_KEYS.workloadIngressBind))),
         workloadHostPid: optionalPositiveInt(env[WORKLOAD_ENV_KEYS.workloadHostPid]),
-        workloadBridgeBind: env[WORKLOAD_ENV_KEYS.workloadBridgeBind],
+        workloadBridgeBind: optionalHostedBind(env[WORKLOAD_ENV_KEYS.workloadBridgeBind]),
         presenceId: optionalPresenceId(env[WORKLOAD_ENV_KEYS.presenceId]),
         workloadKey: optionalWorkloadKey(env[WORKLOAD_ENV_KEYS.workloadKey]),
     };
@@ -82,7 +82,7 @@ export function loadHostMountConfigs(
     );
 }
 
-export function requireWorkloadBridgeBind(env: WorkloadEnv): HostedBindValue {
+export function requireWorkloadBridgeBind(env: WorkloadEnv): HostedBind {
     if (!env.workloadBridgeBind) {
         throw new Error(`${WORKLOAD_ENV_KEYS.workloadBridgeBind} is required`);
     }
@@ -110,7 +110,7 @@ function normalizeConnectedWorkload(value: unknown): HostedWorkloadConnectionCon
         workloadKey: workloadKey(stringField(record, "workloadKey")),
         endpoint: endpointPath(stringField(record, "endpoint")),
         protocol: protocolField(record),
-        bind: stringField(record, "bind"),
+        bind: hostedBind(record.bind),
     };
 }
 
@@ -125,6 +125,35 @@ function protocolField(record: Record<string, unknown>): EndpointProtocol {
         default:
             throw new Error(`unsupported endpoint protocol \`${protocol}\``);
     }
+}
+
+function hostedBind(value: unknown): HostedBind {
+    if (!value || typeof value !== "object" || Array.isArray(value)) {
+        throw new Error("hosted bind must be an object");
+    }
+    const record = value as Record<string, unknown>;
+    switch (record.kind) {
+        case "uds":
+            return { kind: "uds", path: stringField(record, "path") };
+        case "tcp":
+            return { kind: "tcp", host: stringField(record, "host"), port: portField(record) };
+        case "named_pipe":
+            return { kind: "named_pipe", name: stringField(record, "name") };
+        default:
+            throw new Error(`unsupported hosted bind kind \`${String(record.kind)}\``);
+    }
+}
+
+function optionalHostedBind(value: string | undefined): HostedBind | undefined {
+    return value ? hostedBind(JSON.parse(value)) : undefined;
+}
+
+function portField(record: Record<string, unknown>): number {
+    const port = record.port;
+    if (typeof port !== "number" || !Number.isInteger(port) || port <= 0 || port > 65535) {
+        throw new Error("expected tcp port field `port`");
+    }
+    return port;
 }
 
 function optionalPresenceId(value: string | undefined): PresenceId | undefined {

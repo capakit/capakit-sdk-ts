@@ -8,7 +8,7 @@ describe("WorkloadConnectionsImpl", () => {
         const workloads = new WorkloadConnectionsImpl({
             connectedWorkloads: [],
             mounts: [],
-            workloadIngressBind: "tcp:127.0.0.1:4100",
+            workloadIngressBind: { kind: "tcp", host: "127.0.0.1", port: 4100 },
         });
 
         expect(() => workloads.endpoint(

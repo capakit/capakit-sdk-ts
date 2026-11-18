@@ -32,10 +32,10 @@ describe("connectHostedWebSocket", () => {
     test("connects through hosted unix socket bind", async () => {
         const server = createEchoServer("from-uds");
         const path = join(tmpdir(), `capakit-sdk-ws-${process.pid}-${Date.now()}.sock`);
-        await listen(server, { kind: "unix", path });
+        await listen(server, { kind: "uds", path });
 
         try {
-            const client = await connectHostedWebSocket({ kind: "unix", path }, endpointPath("/ws"));
+            const client = await connectHostedWebSocket({ kind: "uds", path }, endpointPath("/ws"));
             const received = readMessage(client);
             client.send("hello");
             await expect(received).resolves.toBe("from-uds: hello");

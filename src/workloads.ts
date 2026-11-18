@@ -8,7 +8,6 @@ import type {
     WorkloadKey,
 } from "./public-types.ts";
 import type { HostedWorkloadConnectionConfig, WorkloadEnv } from "./workload-env.ts";
-import { parseBind } from "./transport.ts";
 
 export class WorkloadConnectionsImpl implements WorkloadConnections {
     readonly workloads: ReadonlyArray<WorkloadConnection>;
@@ -43,7 +42,7 @@ export class WorkloadConnectionsImpl implements WorkloadConnections {
             workloadKey: connection.workloadKey,
             endpoint: endpointPath(connection.endpoint),
             protocol: connection.protocol,
-            bind: parseBind(connection.bind),
+            bind: connection.bind,
         };
     }
 

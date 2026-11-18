@@ -5,7 +5,6 @@ import type {
     RequestOptions,
 } from "node:http";
 
-import { parseBind } from "./transport.ts";
 import type { HostedBind } from "./public-types.ts";
 
 const BRIDGE_CONTENT_TYPE = "application/x-capakit-workload-bridge-jsonl";
@@ -24,8 +23,8 @@ export class WorkloadBridgeClient {
     private readonly bind: HostedBind;
     private generation: ClientGeneration | null = null;
 
-    constructor(value: string) {
-        this.bind = parseBind(value);
+    constructor(bind: HostedBind) {
+        this.bind = bind;
     }
 
     async call<Result>(op: string, params: unknown): Promise<Result> {
@@ -261,14 +260,14 @@ function bridgeRequestOptions(
             "content-length": String(contentLength),
         },
     };
-    if (bind.kind === "unix") {
+    if (bind.kind === "uds") {
         return {
             ...base,
             socketPath: bind.path,
             host: "localhost",
         };
     }
-    if (bind.kind === "pipe") {
+    if (bind.kind === "named_pipe") {
         return {
             ...base,
             socketPath: bind.name,

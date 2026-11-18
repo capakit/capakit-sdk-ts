@@ -14,7 +14,7 @@ describe("HostMountsImpl", () => {
                     access: "read_only",
                 },
             ],
-            workloadIngressBind: "tcp:127.0.0.1:4100",
+            workloadIngressBind: { kind: "tcp", host: "127.0.0.1", port: 4100 },
         });
 
         expect(mounts.get(hostMountKey("docs"))).toEqual({

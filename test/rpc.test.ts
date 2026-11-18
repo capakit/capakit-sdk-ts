@@ -1,3 +1,4 @@
+import type { HostedBind } from "../src/public-types.ts";
 import { createServer } from "node:http";
 import type { IncomingMessage, Server, ServerResponse } from "node:http";
 import type { AddressInfo } from "node:net";
@@ -212,7 +213,7 @@ type BridgeRequest = {
 };
 
 type BridgeServer = {
-    bind: string;
+    bind: HostedBind;
     server: Server;
 };
 
@@ -247,7 +248,7 @@ async function listenRaw(
     });
     const address = server.address() as AddressInfo;
     const bridge = {
-        bind: `tcp:127.0.0.1:${address.port}`,
+        bind: { kind: "tcp", host: "127.0.0.1", port: address.port } satisfies HostedBind,
         server,
     };
     servers.push(bridge);

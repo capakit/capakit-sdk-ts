@@ -91,8 +91,8 @@ function withWorkloadEnv(): () => void {
         workloadIngressBind: process.env[WORKLOAD_ENV_KEYS.workloadIngressBind],
         workloadBridgeBind: process.env[WORKLOAD_ENV_KEYS.workloadBridgeBind],
     };
-    process.env[WORKLOAD_ENV_KEYS.workloadIngressBind] = "tcp:127.0.0.1:4100";
-    process.env[WORKLOAD_ENV_KEYS.workloadBridgeBind] = "tcp:127.0.0.1:4101";
+    process.env[WORKLOAD_ENV_KEYS.workloadIngressBind] = JSON.stringify({ kind: "tcp", host: "127.0.0.1", port: 4100 });
+    process.env[WORKLOAD_ENV_KEYS.workloadBridgeBind] = JSON.stringify({ kind: "tcp", host: "127.0.0.1", port: 4101 });
     return () => {
         restoreEnvValue(WORKLOAD_ENV_KEYS.workloadIngressBind, previous.workloadIngressBind);
         restoreEnvValue(WORKLOAD_ENV_KEYS.workloadBridgeBind, previous.workloadBridgeBind);

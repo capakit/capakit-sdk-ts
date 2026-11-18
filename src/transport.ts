@@ -11,34 +11,7 @@ import { unlink } from "node:fs/promises";
 import { Readable } from "node:stream";
 import type { Duplex } from "node:stream";
 
-import type { HostedBind, HostedBindValue } from "./public-types.ts";
-
-export function parseBind(value: HostedBindValue): HostedBind {
-    if (value.startsWith("unix:")) {
-        return { kind: "unix", path: value.slice("unix:".length) };
-    }
-    if (value.startsWith("tcp:")) {
-        const rest = value.slice("tcp:".length);
-        const lastColon = rest.lastIndexOf(":");
-        if (lastColon <= 0) {
-            throw new Error(`invalid tcp bind: ${value}`);
-        }
-        const host = rest.slice(0, lastColon);
-        const port = Number(rest.slice(lastColon + 1));
-        if (!Number.isInteger(port) || port <= 0) {
-            throw new Error(`invalid tcp port in bind: ${value}`);
-        }
-        return { kind: "tcp", host, port };
-    }
-    if (value.startsWith("pipe:")) {
-        const name = value.slice("pipe:".length);
-        if (name.length === 0) {
-            throw new Error(`invalid pipe bind: ${value}`);
-        }
-        return { kind: "pipe", name };
-    }
-    throw new Error(`unsupported hosted bind: ${value}`);
-}
+import type { HostedBind } from "./public-types.ts";
 
 export function createHostedServer(
     handler: (request: Request) => Promise<Response>,
@@ -58,16 +31,16 @@ export function createHostedServer(
 }
 
 export async function listen(server: HttpServer, bind: HostedBind): Promise<void> {
-    if (bind.kind === "unix") {
+    if (bind.kind === "uds") {
         await removeSocket(bind.path);
     }
     await new Promise<void>((resolve, reject) => {
         server.once("error", reject);
-        if (bind.kind === "unix") {
+        if (bind.kind === "uds") {
             server.listen(bind.path, () => resolve());
             return;
         }
-        if (bind.kind === "pipe") {
+        if (bind.kind === "named_pipe") {
             server.listen(bind.name, () => resolve());
             return;
         }
@@ -143,7 +116,7 @@ export async function writeFetchResponse(
 }
 
 export function clientAuthority(bind: HostedBind): string {
-    if (bind.kind === "unix" || bind.kind === "pipe") {
+    if (bind.kind === "uds" || bind.kind === "named_pipe") {
         return "http://localhost";
     }
     return `http://${bind.host}:${bind.port}`;
@@ -256,10 +229,10 @@ function rawRequestOptions(
         path: `${url.pathname}${url.search}`,
         headers,
     };
-    if (bind.kind === "unix") {
+    if (bind.kind === "uds") {
         return { ...base, socketPath: bind.path, host: url.hostname || "localhost" };
     }
-    if (bind.kind === "pipe") {
+    if (bind.kind === "named_pipe") {
         return { ...base, socketPath: bind.name, host: url.hostname || "localhost" };
     }
     return { ...base, host: bind.host, port: bind.port };

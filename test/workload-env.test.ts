@@ -16,11 +16,11 @@ describe("loadWorkloadEnv", () => {
                     workloadKey: "worker",
                     endpoint: "chat",
                     protocol: "http",
-                    bind: "tcp:127.0.0.1:4100",
+                    bind: { kind: "tcp", host: "127.0.0.1", port: 4100 },
                 },
             ]),
-            [WORKLOAD_ENV_KEYS.workloadIngressBind]: "unix:/tmp/capakit.sock",
-            [WORKLOAD_ENV_KEYS.workloadBridgeBind]: "tcp:127.0.0.1:4200",
+            [WORKLOAD_ENV_KEYS.workloadIngressBind]: JSON.stringify({ kind: "uds", path: "/tmp/capakit.sock" }),
+            [WORKLOAD_ENV_KEYS.workloadBridgeBind]: JSON.stringify({ kind: "tcp", host: "127.0.0.1", port: 4200 }),
             [WORKLOAD_ENV_KEYS.presenceId]: "presence-1",
             [WORKLOAD_ENV_KEYS.workloadKey]: "self",
             [WORKLOAD_ENV_KEYS.mounts]: JSON.stringify({
@@ -31,8 +31,8 @@ describe("loadWorkloadEnv", () => {
             }),
         });
 
-        expect(env.workloadIngressBind).toBe("unix:/tmp/capakit.sock");
-        expect(env.workloadBridgeBind).toBe("tcp:127.0.0.1:4200");
+        expect(env.workloadIngressBind).toEqual({ kind: "uds", path: "/tmp/capakit.sock" });
+        expect(env.workloadBridgeBind).toEqual({ kind: "tcp", host: "127.0.0.1", port: 4200 });
         expect(env.presenceId).toBe("presence-1");
         expect(env.workloadKey).toBe("self");
         expect(env.mounts).toEqual([
@@ -47,13 +47,25 @@ describe("loadWorkloadEnv", () => {
                 workloadKey: "worker",
                 endpoint: "/chat",
                 protocol: "http",
-                bind: "tcp:127.0.0.1:4100",
+                bind: { kind: "tcp", host: "127.0.0.1", port: 4100 },
             },
         ]);
     });
 
     test("requires managed ingress bind", () => {
         expect(() => loadWorkloadEnv({})).toThrow(/CAPAKIT_WORKLOAD_INGRESS_BIND/);
+    });
+
+    test("rejects malformed binds", () => {
+        for (const bind of [
+            { kind: "tcp", host: "127.0.0.1", port: "4100" },
+            { kind: "uds" },
+            { kind: "vsock", cid: 3 },
+        ]) {
+            expect(() => loadWorkloadEnv({
+                [WORKLOAD_ENV_KEYS.workloadIngressBind]: JSON.stringify(bind),
+            })).toThrow();
+        }
     });
 });
 
@@ -103,7 +115,7 @@ describe("loadConnectedWorkloadConfigs", () => {
                     workloadKey: "worker",
                     endpoint: "/chat",
                     protocol: "smtp",
-                    bind: "tcp:127.0.0.1:4100",
+                    bind: { kind: "tcp", host: "127.0.0.1", port: 4100 },
                 },
             ]),
         })).toThrow(/unsupported endpoint protocol/);
@@ -115,16 +127,16 @@ describe("requireWorkloadBridgeBind", () => {
         expect(requireWorkloadBridgeBind({
             connectedWorkloads: [],
             mounts: [],
-            workloadIngressBind: "tcp:127.0.0.1:4100",
-            workloadBridgeBind: "tcp:127.0.0.1:4200",
-        })).toBe("tcp:127.0.0.1:4200");
+            workloadIngressBind: { kind: "tcp", host: "127.0.0.1", port: 4100 },
+            workloadBridgeBind: { kind: "tcp", host: "127.0.0.1", port: 4200 },
+        })).toEqual({ kind: "tcp", host: "127.0.0.1", port: 4200 });
     });
 
     test("rejects missing bridge bind", () => {
         expect(() => requireWorkloadBridgeBind({
             connectedWorkloads: [],
             mounts: [],
-            workloadIngressBind: "tcp:127.0.0.1:4100",
+            workloadIngressBind: { kind: "tcp", host: "127.0.0.1", port: 4100 },
         })).toThrow(/CAPAKIT_WORKLOAD_BRIDGE_BIND/);
     });
 });

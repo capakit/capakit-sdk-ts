@@ -72,7 +72,7 @@ export async function connectHostedWebSocket(
     endpoint: EndpointPath,
     signal?: AbortSignal,
 ): Promise<WebSocket> {
-    if (bind.kind === "unix" || bind.kind === "pipe") {
+    if (bind.kind === "uds" || bind.kind === "named_pipe") {
         return await connectRawHostedWebSocket(bind, endpoint, signal);
     }
     if (signal?.aborted) {
@@ -177,7 +177,7 @@ async function connectRawHostedWebSocket(
 }
 
 function webSocketUrl(bind: HostedBind, endpoint: EndpointPath): string {
-    if (bind.kind === "unix") {
+    if (bind.kind === "uds") {
         return `ws://localhost${endpoint}`;
     }
     if (bind.kind === "tcp") {
@@ -187,10 +187,10 @@ function webSocketUrl(bind: HostedBind, endpoint: EndpointPath): string {
 }
 
 function connectRawSocket(bind: HostedBind): Socket {
-    if (bind.kind === "unix") {
+    if (bind.kind === "uds") {
         return createConnection({ path: bind.path });
     }
-    if (bind.kind === "pipe") {
+    if (bind.kind === "named_pipe") {
         return createConnection({ path: bind.name });
     }
     throw new Error(`raw websocket socket unsupported for bind kind ${bind.kind}`);

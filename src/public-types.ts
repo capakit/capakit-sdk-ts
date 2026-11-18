@@ -4,7 +4,6 @@ type Brand<T, Name extends string> = T & {
     readonly [CAPAKIT_BRAND]: Name;
 };
 
-export type HostedBindValue = string;
 export type PresenceId = string;
 export type EndpointPath = Brand<string, "EndpointPath">;
 export type WorkloadKey = Brand<string, "WorkloadKey">;
@@ -14,9 +13,9 @@ export type EndpointProtocol = "http" | "mcp" | "oaic" | "a2a";
 export type HostMountAccess = "read_only" | "read_write";
 
 export type HostedBind =
-    | { kind: "unix"; path: string }
+    | { kind: "uds"; path: string }
     | { kind: "tcp"; host: string; port: number }
-    | { kind: "pipe"; name: string };
+    | { kind: "named_pipe"; name: string };
 
 export declare function endpointPath(value: string): EndpointPath;
 export declare function workloadKey(value: string): WorkloadKey;
@@ -65,7 +64,7 @@ export type HostMounts = {
 };
 
 export type WorkloadSdkOptions = {
-    bind?: HostedBindValue;
+    bind?: HostedBind;
     onPresenceStart?: WorkloadPresenceLifecycleHook;
     onShutdown?: WorkloadShutdownHook;
 };
