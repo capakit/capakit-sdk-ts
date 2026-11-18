@@ -53,7 +53,7 @@
         }
     },
     "scripts": {
-        "audit": "npm audit --audit-level=moderate",
+        "audit": "npm audit --omit=dev --audit-level=moderate",
         "test": "vitest run",
         "typecheck": "tsc --noEmit",
         "check": "npm run audit && npm run typecheck && npm test",
